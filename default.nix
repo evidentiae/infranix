@@ -1,5 +1,5 @@
 {
-  config = {
-    nixos = import ./config/nixos.nix;
+  builders = {
+    nixos = import ./builders/nixos.nix;
   };
 }

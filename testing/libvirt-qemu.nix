@@ -84,6 +84,7 @@ in {
 
       defaultInstanceConfig = mkOption {
         type = types.attrs;
+        default = {};
       };
 
       instances = mkOption {
@@ -104,7 +105,7 @@ in {
         readOnly = false;
       };
       nixos.modules = singleton {
-        systemd.services.test = {
+        systemd.services.test-driver = {
           wantedBy = [ "multi-user.target" ];
           wants = [ "network.target" ];
           after = [ "network.target" ];
@@ -114,10 +115,11 @@ in {
             Type = "oneshot";
             ExecStart = "${pkgs.writeScriptBin "test" ''
               #!${bash}/bin/bash
-              echo "running test script" > stdout.log
-              "${cfg.script}" > >(tee -a stdout.log) 2> >(tee -a stderr.log >&2) && touch passed
+              echo "[test-driver] Running test script" > stdout.log
+              "${cfg.script}" > >(tee -a stdout.log) \
+                2> >(tee -a stderr.log >&2) && touch passed
               touch done
-              echo "test script done" >> stdout.log
+              echo "[test-driver] Test script done" >> stdout.log
               ${pkgs.systemd}/bin/systemctl poweroff
             ''}/bin/test";
           };
@@ -143,12 +145,19 @@ in {
         # can't write to the "out" dir.
         chmod a+w out
 
+        function launchVM() {
+          local name="$1"
+          local xml="$2"
+          sed s,@PWD@,"$(pwd)/",g "$xml" > "$name.xml"
+          echo >&2 "[$name] Launching VM"
+          local virshcmd='virsh -c "${cfg.connectionURI}" create "$name.xml"'
+          local virshopts="--autodestroy --console"
+          script -c "timeout -s9 ${cfg.timeout} $virshcmd $virshopts" \
+            "out/console-logs/$name" >/dev/null || true &
+        }
+
         ${concatStrings (mapAttrsToList (name: inst: ''
-          sed s,@PWD@,"$(pwd)/",g "${inst.libvirt.xmlFile}" > "${name}.xml"
-          echo "launching vm ${name}"
-          timeout ${cfg.timeout} script -c \
-            'virsh -c "${cfg.connectionURI}" create "${name}.xml" --autodestroy --console' \
-            "out/console-logs/${name}" >/dev/null || true &
+          launchVM "${name}" "${inst.libvirt.xmlFile}"
           ${optionalString (name == "test-driver") "testvmpid=$!"}
         '') cfg.instances)}
 
@@ -163,13 +172,18 @@ in {
         fi
 
         if ! [ -a out/done ]; then
-          echo "possible test timeout!"
+          echo >&2 "Possible test timeout!"
         fi
 
         if ! [ -a out/passed ]; then
+          ${concatStrings (mapAttrsToList (name: inst: ''
+            echo >&2 "[${name}] VM console log:"
+            cat >&2 "out/console-logs/${name}"
+          '') cfg.instances)}
           exit 1
         fi
 
+        rm -f out/{done,passed}
         chmod go-w out
         mv out $out
       '';

@@ -9,11 +9,7 @@ let
 
   inherit (import ../lib.nix) hexByteToInt mkMAC;
 
-  ips = mapAttrs (name: _:
-    let f = n: toString (hexByteToInt (
-      substring n 2 (mkMAC "libvirt-test-${name}")
-    )); in "${cfg.subnet}.${f 0}.${f 3}"
-  ) cfg.instances;
+  ips = mapAttrs (_: i: i.ip) cfg.instances;
 
   instanceOpts = { name, config, lib, ... }: {
     imports = [
@@ -21,25 +17,52 @@ let
       cfg.defaultInstanceConfig
     ];
 
+    options = {
+      ip = mkOption {
+        type = types.str;
+        default = let f = n: toString (hexByteToInt (
+          substring n 2 (mkMAC "libvirt-test-${name}")
+        )); in "${cfg.subnet}.${f 0}.${f 3}";
+      };
+
+      extraHostNames = mkOption {
+        type = with types; listOf str;
+        default = [];
+      };
+    };
+
     config = {
       _module.args = { inherit pkgs; };
 
-      libvirt.name = "libvirt-test-${name}";
-
-      libvirt.netdevs.eth0 = {};
+      libvirt = {
+        name = "libvirt-test-${name}";
+        netdevs.eth0 = {};
+        consoleFile = "@PWD@/out/logs/${name}.console";
+        extraDevices = ''
+          <serial type='file'>
+            <source path='@PWD@/out/logs/${name}.journal'/>
+            <target port='1'/>
+          </serial>
+        '';
+      };
 
       nixos.modules = singleton {
+        services.journald.extraConfig = ''
+          Storage=volatile
+          ForwardToConsole=yes
+          TTYPath=/dev/ttyS1
+        '';
         networking = {
           hostName = name;
           firewall.enable = false;
           useDHCP = false;
           interfaces.eth0.ip4 = singleton {
             prefixLength = 16;
-            address = ips.${name};
+            address = config.ip;
           };
-          extraHosts = concatStringsSep "\n" (
-            mapAttrsToList (name: ip: "${ip} ${name}") ips
-          );
+          extraHosts = concatStringsSep "\n" (mapAttrsToList (name: i:
+            "${i.ip} ${concatStringsSep " " ([name] ++ i.extraHostNames)}"
+          ) cfg.instances);
         };
       };
     };
@@ -47,16 +70,13 @@ let
 
 in {
 
-  imports = [
-  ];
-
   options = {
 
     libvirt.test = {
 
       timeout = mkOption {
-        type = types.str;
-        default = "10m";
+        type = types.int;
+        default = 600;
       };
 
       subnet = mkOption {
@@ -120,7 +140,6 @@ in {
                 2> >(tee -a stderr.log >&2) && touch passed
               touch done
               echo "[test-driver] Test script done" >> stdout.log
-              ${pkgs.systemd}/bin/systemctl poweroff
             ''}/bin/test";
           };
         };
@@ -135,7 +154,7 @@ in {
       phases = [ "buildPhase" ];
 
       buildPhase = ''
-        mkdir -p out/console-logs
+        mkdir -p out/logs
 
         # Hack to let qemu access paths inside the build directory
         chmod a+x .
@@ -145,47 +164,46 @@ in {
         # can't write to the "out" dir.
         chmod a+w out
 
-        function launchVM() {
-          local name="$1"
-          local xml="$2"
-          sed s,@PWD@,"$(pwd)/",g "$xml" > "$name.xml"
-          echo >&2 "[$name] Launching VM"
-          local virshcmd='virsh -c "${cfg.connectionURI}" create "$name.xml"'
-          local virshopts="--autodestroy --console"
-          script -c "timeout -s9 ${cfg.timeout} $virshcmd $virshopts" \
-            "out/console-logs/$name" >/dev/null || true &
+        function destroyVMs() {
+          ${concatStrings (mapAttrsToList (_: inst: ''
+            virsh -c "${cfg.connectionURI}" destroy "${inst.libvirt.name}" || true
+          '') cfg.instances)}
+          kill $(jobs -p) || true
         }
 
+        trap destroyVMs SIGTERM SIGKILL EXIT
+
         ${concatStrings (mapAttrsToList (name: inst: ''
-          launchVM "${name}" "${inst.libvirt.xmlFile}"
-          ${optionalString (name == "test-driver") "testvmpid=$!"}
+          sed s,@PWD@,"$(pwd)/",g "${inst.libvirt.xmlFile}" > "${name}.xml"
+          touch "out/logs/${name}."{console,journal}
+          virsh -c "${cfg.connectionURI}" create "${name}.xml"
         '') cfg.instances)}
 
-        tail -Fq out/stdout.log out/stderr.log 2>/dev/null &
+        tail -Fq out/stdout.log out/stderr.log \
+          ${concatMapStringsSep " " (n: "out/logs/${n}.journal")
+            (attrNames cfg.instances)
+          } 2>/dev/null &
 
-        wait $testvmpid
+        n=0
+        while [[ ! -a out/done ]] && (($n < ${toString cfg.timeout})); do
+          n=$((n+1))
+          sleep 1
+        done
 
-        killpids="$(pgrep -u $(id -un) virsh) $(jobs -rp)"
-        if [ -n "$killpids" ]; then
-          kill -9 $killpids
-          wait $killpids 2>/dev/null || true
-        fi
+        chmod go-w out
 
         if ! [ -a out/done ]; then
           echo >&2 "Possible test timeout!"
         fi
 
         if ! [ -a out/passed ]; then
-          ${concatStrings (mapAttrsToList (name: inst: ''
-            echo >&2 "[${name}] VM console log:"
-            cat >&2 "out/console-logs/${name}"
-          '') cfg.instances)}
           exit 1
         fi
 
         rm -f out/{done,passed}
-        chmod go-w out
         mv out $out
+
+        destroyVMs
       '';
     };
 

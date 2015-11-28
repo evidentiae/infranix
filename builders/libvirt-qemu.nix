@@ -17,7 +17,7 @@ let
       <uuid>${cfg.uuid}</uuid>
       <memory unit='M'>${toString cfg.memory}</memory>
       <currentMemory unit='M'>${toString cfg.memory}</currentMemory>
-      <vcpu placement='static'>2</vcpu>
+      <vcpu placement='static'>${toString cfg.cpuCount}</vcpu>
       <os>
         <type>hvm</type>
         <kernel>${sys}/kernel</kernel>
@@ -33,7 +33,15 @@ let
       <devices>
         <emulator>${pkgs.qemu}/bin/qemu-system-x86_64</emulator>
         <memballoon model='virtio'/>
-        <serial type='pty'><target port='0'/></serial>
+        ${if cfg.consoleFile == null
+          then "<serial type='pty'><target port='0'/></serial>"
+          else ''
+            <serial type='file'>
+              <source path='${cfg.consoleFile}'/>
+              <target port='0'/>
+            </serial>
+          ''
+        }
         <console type='pty'><target type='serial' port='0'/></console>
         ${concatStrings (mapAttrsToList (n: dev: ''
           <interface type='network'>
@@ -49,6 +57,7 @@ let
             ${optionalString share.readOnly "<readonly/>"}
           </filesystem>
         '') cfg.fileShares)}
+        ${cfg.extraDevices}
       </devices>
     </domain>
   '';
@@ -81,7 +90,19 @@ in {
       };
       uuid = mkOption {
         default = mkUUID cfg.name;
-        type = types.string;
+        type = types.str;
+      };
+      consoleFile = mkOption {
+        type = with types; nullOr str;
+        default = null;
+      };
+      extraDevices = mkOption {
+        type = types.lines;
+        default = "";
+      };
+      cpuCount = mkOption {
+        type = types.int;
+        default = 2;
       };
       fileShares = mkOption {
         type = with types; attrsOf (submodule {

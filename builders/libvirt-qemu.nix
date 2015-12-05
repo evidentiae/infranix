@@ -169,6 +169,8 @@ in {
         vesa = false;
       };
 
+      networking.usePredictableInterfaceNames = false;
+
       fileSystems = mkMerge (
         singleton {
           "/" = {

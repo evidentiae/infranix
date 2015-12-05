@@ -56,6 +56,7 @@ let
           hostName = name;
           firewall.enable = false;
           useDHCP = false;
+          usePredictableInterfaceNames = false;
           interfaces.eth0.ip4 = singleton {
             prefixLength = 16;
             address = config.ip;

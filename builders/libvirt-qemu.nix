@@ -31,7 +31,6 @@ let
       <on_reboot>destroy</on_reboot>
       <on_crash>destroy</on_crash>
       <devices>
-        <emulator>${pkgs.qemu}/bin/qemu-system-x86_64</emulator>
         <memballoon model='virtio'/>
         ${if cfg.consoleFile == null
           then "<serial type='pty'><target port='0'/></serial>"

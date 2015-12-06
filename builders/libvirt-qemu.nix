@@ -42,7 +42,6 @@ let
             </serial>
           ''
         }
-        <console type='pty'><target type='serial' port='0'/></console>
         ${concatStrings (mapAttrsToList (n: dev: ''
           <interface type='network'>
             <model type='virtio'/>
@@ -170,6 +169,8 @@ in {
       };
 
       networking.usePredictableInterfaceNames = false;
+
+      i18n.consoleFont = "";
 
       fileSystems = mkMerge (
         singleton {

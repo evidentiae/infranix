@@ -35,7 +35,7 @@ let
       _module.args = { inherit pkgs; };
 
       libvirt = {
-        name = "libvirt-test-${name}";
+        name = "${name}-__RAND__";
         netdevs.eth0 = {};
         consoleFile = "@PWD@/out/logs/${name}.console";
         extraDevices = ''
@@ -120,6 +120,7 @@ in {
   config = {
 
     libvirt.test.instances.test-driver = {
+      libvirt.name = mkForce "__RAND__";
       libvirt.fileShares.out = {
         guestPath = "/out";
         hostPath = "out";
@@ -155,6 +156,23 @@ in {
       phases = [ "buildPhase" ];
 
       buildPhase = ''
+        function cleanup() {
+          local jobs="$(jobs -p)"
+          test -n "$jobs" && kill $jobs || true
+        }
+
+        function waitForFile() {
+          local file="$1"
+          local n=0
+          while [[ ! -a "$file" ]] && (($n < ${toString cfg.timeout})); do
+            n=$((n+1))
+            sleep 1
+          done
+          if ! [ -a "$file" ]; then return 1; fi
+        }
+
+        trap cleanup SIGTERM SIGKILL EXIT
+
         mkdir -p out/logs
 
         # Hack to let qemu access paths inside the build directory
@@ -165,46 +183,33 @@ in {
         # can't write to the "out" dir.
         chmod a+w out
 
-        function destroyVMs() {
-          ${concatStrings (mapAttrsToList (_: inst: ''
-            virsh -c "${cfg.connectionURI}" destroy "${inst.libvirt.name}" || true
-          '') cfg.instances)}
-          kill $(jobs -p) || true
-        }
+        uuid="$(uuidgen -r)"
 
-        trap destroyVMs SIGTERM SIGKILL EXIT
-
+        # Prepare libvirt XML files
         ${concatStrings (mapAttrsToList (name: inst: ''
-          sed s,@PWD@,"$(pwd)/",g "${inst.libvirt.xmlFile}" > "${name}.xml"
+          sed s,@PWD@,"$(pwd)/",g "${inst.libvirt.xmlFile}" | \
+          sed s,__RAND__,"$uuid",g > "${name}.xml"
           touch "out/logs/${name}."{console,journal}
-          virsh -c "${cfg.connectionURI}" create "${name}.xml"
         '') cfg.instances)}
+
+        # Start libvirt machines
+        virsh -c "${cfg.connectionURI}" \
+          "${concatStringsSep ";" (mapAttrsToList (name: inst:
+            "create ${name}.xml --autodestroy"
+          ) cfg.instances)}; event --domain "$uuid" --event reboot" &
 
         tail -Fq out/stdout.log out/stderr.log \
           ${concatMapStringsSep " " (n: "out/logs/${n}.journal")
             (attrNames cfg.instances)
           } 2>/dev/null &
 
-        n=0
-        while [[ ! -a out/done ]] && (($n < ${toString cfg.timeout})); do
-          n=$((n+1))
-          sleep 1
-        done
+        waitForFile out/done || echo >&2 "Possible test timeout!"
 
-        chmod go-w out
-
-        if ! [ -a out/done ]; then
-          echo >&2 "Possible test timeout!"
-        fi
-
-        if ! [ -a out/passed ]; then
-          exit 1
-        fi
+        test -a out/passed || exit 1
 
         rm -f out/{done,passed}
+        chmod go-w out
         mv out $out
-
-        destroyVMs
       '';
     };
 

@@ -11,7 +11,40 @@ let
 
   sys = config.nixos.out.system;
 
-  libvirtxml = ''
+  libvirtDevices = [
+    "<memballoon model='virtio'/>"
+    (if cfg.consoleFile == null
+      then "<serial type='pty'><target port='0'/></serial>"
+      else ''
+        <serial type='file'>
+          <source path='${cfg.consoleFile}'/>
+          <target port='0'/>
+        </serial>
+      ''
+    )
+    (concatStrings (mapAttrsToList (n: dev: ''
+      <interface type='network'>
+        <model type='virtio'/>
+        <source network='${dev.network}'/>
+        ${optionalString (dev.mac != null)
+          "<mac address='${dev.mac}'/>"
+        }
+      </interface>
+    '') cfg.netdevs))
+    (concatStrings (mapAttrsToList (n: share: ''
+      <filesystem type='mount' accessmode='${share.accessMode}'>
+        <source dir='${
+          (optionalString (substring 0 1 share.hostPath != "/") "@pwd@/") +
+          share.hostPath
+        }'/>
+        <target dir='${n}'/>
+        ${optionalString share.readOnly "<readonly/>"}
+      </filesystem>
+    '') cfg.fileShares))
+    cfg.extraDevices
+  ];
+
+  libvirtDomain = ''
     <domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
       <name>${cfg.name}</name>
       <uuid>${cfg.uuid}</uuid>
@@ -22,7 +55,11 @@ let
         <type>hvm</type>
         <kernel>${sys}/kernel</kernel>
         <initrd>${sys}/initrd</initrd>
-        <cmdline>$(cat ${sys}/kernel-params) console=ttyS0 init=${sys}/init</cmdline>
+        <cmdline>${toString (
+          config.nixos.out.config.boot.kernelParams ++ [
+            "console=ttyS0" "init=${sys}/init"
+          ]
+        )}</cmdline>
       </os>
       <features><acpi/></features>
       <cpu><model>kvm64</model></cpu>
@@ -30,33 +67,7 @@ let
       <on_poweroff>destroy</on_poweroff>
       <on_reboot>destroy</on_reboot>
       <on_crash>destroy</on_crash>
-      <devices>
-        <memballoon model='virtio'/>
-        ${if cfg.consoleFile == null
-          then "<serial type='pty'><target port='0'/></serial>"
-          else ''
-            <serial type='file'>
-              <source path='${cfg.consoleFile}'/>
-              <target port='0'/>
-            </serial>
-          ''
-        }
-        ${concatStrings (mapAttrsToList (n: dev: ''
-          <interface type='network'>
-            <model type='virtio'/>
-            <mac address='${dev.mac}'/>
-            <source network='${dev.network}'/>
-          </interface>
-        '') cfg.netdevs)}
-        ${concatStrings (mapAttrsToList (n: share: ''
-          <filesystem type='mount' accessmode='${share.accessMode}'>
-            <source dir='${optionalString (substring 0 1 share.hostPath != "/") "@PWD@"}${share.hostPath}'/>
-            <target dir='${n}'/>
-            ${optionalString share.readOnly "<readonly/>"}
-          </filesystem>
-        '') cfg.fileShares)}
-        ${cfg.extraDevices}
-      </devices>
+      <devices>${concatStrings libvirtDevices}</devices>
     </domain>
   '';
 
@@ -69,7 +80,7 @@ in {
     libvirt = {
       xml = mkOption {
         type = types.str;
-        default = libvirtxml;
+        default = libvirtDomain;
       };
       xmlFile = mkOption {
         type = types.path;
@@ -135,12 +146,8 @@ in {
               default = "default";
             };
             mac = mkOption {
-              type = types.str;
+              type = with types; nullOr str;
               default = mkMAC "netdev-${name}-${sys}";
-            };
-            uuid = mkOption {
-              type = types.str;
-              default = mkUUID "netdev-${name}-${sys}";
             };
           };
         }));
@@ -150,7 +157,7 @@ in {
 
   config = {
 
-    libvirt.xmlFile = pkgs.writeText "libvirt-${cfg.name}.xml" config.libvirt.xml;
+    libvirt.xmlFile = pkgs.writeText "libvirt.xml" config.libvirt.xml;
 
     libvirt.fileShares.nixstore = {
       hostPath = "/nix/store";

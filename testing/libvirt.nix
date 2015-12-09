@@ -165,9 +165,15 @@ in {
           any Nix build.
         '';
         default = ''
-          test -a hosts/test-driver/script.exit && \
-          test "$(cat hosts/test-driver/script.exit)" = "0" || \
-          exit 1
+          if ! [ -a "$output/hosts/test-driver/script.exit" ]; then
+            echo >&2 "Test script exit code not found. Possible test timeout"
+            exit 1
+          fi
+          ex="$(cat "$output/hosts/test-driver/script.exit")"
+          if ! [ "$ex" = "0" ]; then
+            echo >&2 "Test script failed with exit code $ex"
+            exit 1
+          fi
         '';
       };
 

@@ -41,18 +41,23 @@ let
           mappedGid = "@gid@";
           rootPath = "root-${name}";
         };
-        name = "${name}-@uuid@";
+        name = "${name}-@testid@";
         netdevs.eth0 = {
           mac = null;
-          network = "net-@uuid@";
+          network = "net-@testid@";
         };
-        consoleFile = "@pwd@/out/logs/${name}.console";
+        consoleFile = "@pwd@/out/hosts/${name}/console.log";
         extraDevices = ''
           <serial type='file'>
-            <source path='@pwd@/out/logs/${name}.journal'/>
+            <source path='@pwd@/out/hosts/${name}/journal.log'/>
             <target port='1'/>
           </serial>
         '';
+        fileShares.out = {
+          guestPath = "/out";
+          hostPath = "out/hosts/${name}";
+          readOnly = false;
+        };
       };
 
       nixos.modules = singleton {
@@ -80,17 +85,20 @@ let
     };
   };
 
+  instNames = attrNames cfg.instances;
+  instList = concatMapStringsSep "," (n: ''"${n}"'') instNames;
+
   virshCmds = concatStringsSep ";" (flatten [
     "net-create out/libvirt/net-test.xml"
-    (map (name: "create out/libvirt/dom-${name}.xml --autodestroy") (attrNames cfg.instances))
-    "event --timeout ${toString cfg.timeout} --domain $uuid --event lifecycle"
-    "net-destroy net-$uuid"
+    (map (name: "create out/libvirt/dom-${name}.xml --autodestroy") instNames)
+    "event --timeout ${toString cfg.timeout} --domain $testid --event lifecycle"
+    "net-destroy net-$testid"
   ]);
 
   # A temporary, isolated network for our test machines
   libvirtNetwork = writeText "network.xml" ''
     <network>
-      <name>net-@uuid@</name>
+      <name>net-@testid@</name>
     </network>
   '';
 
@@ -105,8 +113,21 @@ in {
         default = 600;
       };
 
-      out.result = mkOption {
-        type = types.path;
+      out = {
+        result = mkOption {
+          type = types.path;
+          description = ''
+            The result of the test, as a nix derivation. This build
+            fails if the verification script fails.
+          '';
+        };
+        output = mkOption {
+          type = types.path;
+          description = ''
+            The output produced by the test, as a nix derivation.
+            This build always succeed.
+          '';
+        };
       };
 
       backend = mkOption {
@@ -129,6 +150,25 @@ in {
       instances = mkOption {
         default = {};
         type = with types; attrsOf (submodule instanceOpts);
+      };
+
+      verification-script = mkOption {
+        type = types.lines;
+        description = ''
+          A script that will be inlined in the build phase of the
+          result builder. The environment variable <code>output</output>
+          will point to the directory containing the build output.
+          By default, the output is checked for the existence of a
+          successful exit code file from the test script.
+          You can also use this script to do post-processing of the
+          test output, by writing to the <code>out</code> path like
+          any Nix build.
+        '';
+        default = ''
+          test -a hosts/test-driver/script.exit && \
+          test "$(cat hosts/test-driver/script.exit)" = "0" || \
+          exit 1
+        '';
       };
 
       test-driver = {
@@ -164,14 +204,9 @@ in {
   config = {
 
     libvirt.test.instances.test-driver = {
-      libvirt.name = mkForce "@uuid@";
-      libvirt.fileShares.out = {
-        guestPath = "/out";
-        hostPath = "out";
-        readOnly = false;
-      };
+      libvirt.name = mkForce "@testid@";
       nixos.modules = cfg.test-driver.extraModules ++ [{
-        systemd.services.test-driver = {
+        systemd.services.test-script = {
           wantedBy = [ "multi-user.target" ];
           wants = [ "network.target" ];
           after = [ "network.target" ];
@@ -179,21 +214,33 @@ in {
           serviceConfig = {
             WorkingDirectory = "/out";
             Type = "oneshot";
-            ExecStart = "${pkgs.writeScriptBin "test-driver" ''
+            ExecStart = "${pkgs.writeScriptBin "test-script" ''
               #!${bash}/bin/bash
-              "${cfg.test-driver.script}" > stdout.log 2> stderr.log && \
-                touch passed
-              touch done
+              "${cfg.test-driver.script}" > script.stdout 2> script.stderr
+              echo "$?" > script.exit
               sync -f .
               ${pkgs.systemd}/bin/systemctl poweroff --force
-            ''}/bin/test-driver";
+            ''}/bin/test-script";
           };
         };
       }];
     };
 
     libvirt.test.out.result = pkgs.stdenv.mkDerivation {
-      name = "libvirt-test-result";
+      name = "test-result";
+
+      phases = [ "buildPhase" ];
+
+      buildPhase = ''
+        export output="${cfg.out.output}"
+        echo "Verifying test output $output"
+        ${cfg.verification-script}
+        test -a "$out" || mkdir "$out"
+      '';
+    };
+
+    libvirt.test.out.output = pkgs.stdenv.mkDerivation {
+      name = "test-output";
 
       src = runCommand "test-src" {} ''
         mkdir $out
@@ -203,9 +250,7 @@ in {
         ln -sv  "${libvirtNetwork}" "$out/net-test.xml"
       '';
 
-      buildInputs = with pkgs; [ gnugrep libvirt procps utillinux ];
-
-      phases = [ "buildPhase" ];
+      phases = [ "buildPhase" "installPhase" "fixupPhase" ];
 
       buildPhase = ''
         function cleanup() {
@@ -225,42 +270,34 @@ in {
 
         trap cleanup SIGTERM SIGKILL EXIT
 
-        uuid="$(uuidgen -r)"
+        # Variables that are substituted within the libvirt XML files
+        testid="$(basename "$out")"
+        testid="''${testid%%-*}"
         pwd="$(pwd)"
+        uid="$(id -u)"
+        gid="$(id -g)"
 
-        ${optionalString (cfg.backend == "lxc") ''
-          mkdir root-{${concatMapStringsSep "," (n: ''"${n}"'') (attrNames cfg.instances)}}
-          uid="$(id -u)"
-          gid="$(id -g)"
-        ''}
-
-        echo "Test UUID: $uuid"
-
-        mkdir -p out/logs out/libvirt
-        touch out/logs/{${concatMapStringsSep "," (n: ''"${n}"'')
-          (attrNames cfg.instances)}}.{console,journal}
+        # Setup directories and libvirt XML files
+        mkdir -p out/libvirt out/hosts/{${instList}}
+        touch out/hosts/{${instList}}/{console,journal}.log
         cp -t out/libvirt "$src"/*
-
         for f in out/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
+        ${optionalString (cfg.backend == "lxc") "mkdir root-{${instList}}"}
 
         # Let libvirt access paths inside the build directory and write to out dir
         chmod a+x .
-        chmod a+w out
+        chmod a+w out/hosts/*
 
-        tail -Fq out/stdout.log out/stderr.log \
-          ${concatMapStringsSep " " (n: "out/logs/${n}.journal")
-            (attrNames cfg.instances)
-          } 2>/dev/null &
+        tail -Fq out/hosts/test-driver/script.std{out,err} \
+          out/hosts/{${instList}}/{console,journal}.log 2>/dev/null &
 
-        # Start libvirt machines
-        virsh -c "${cfg.connectionURI}" "${virshCmds}" >/dev/null || true
+        ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+          "${virshCmds}" >/dev/null || true
 
-        test -a out/done || echo >&2 "Possible test timeout!"
-        test -a out/passed || exit 1
-
-        chmod go-w out
-        mv out $out
+        cleanup
       '';
+
+      installPhase = "mv out $out";
     };
 
   };

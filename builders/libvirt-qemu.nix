@@ -11,8 +11,11 @@ let
 
   sys = config.nixos.out.system;
 
+  ifLxc = optionalString (cfg.backend == "lxc");
+  ifQemu = optionalString (cfg.backend == "qemu");
+
   libvirtDevices = [
-    "<memballoon model='virtio'/>"
+    (ifQemu "<memballoon model='virtio'/>")
     (if cfg.consoleFile == null
       then "<serial type='pty'><target port='0'/></serial>"
       else ''
@@ -22,9 +25,11 @@ let
         </serial>
       ''
     )
+    (ifLxc "<console type='pty'><target port='0'/></console>")
     (concatStrings (mapAttrsToList (n: dev: ''
+
       <interface type='network'>
-        <model type='virtio'/>
+        ${ifQemu "<model type='virtio'/>"}
         <source network='${dev.network}'/>
         ${optionalString (dev.mac != null)
           "<mac address='${dev.mac}'/>"
@@ -32,19 +37,19 @@ let
       </interface>
     '') cfg.netdevs))
     (concatStrings (mapAttrsToList (n: share: ''
-      <filesystem type='mount' accessmode='${share.accessMode}'>
+      <filesystem type='mount' ${ifQemu "accessmode='${share.accessMode}'"}>
         <source dir='${
           (optionalString (substring 0 1 share.hostPath != "/") "@pwd@/") +
           share.hostPath
         }'/>
-        <target dir='${n}'/>
-        ${optionalString share.readOnly "<readonly/>"}
+        <target dir='${if cfg.backend == "qemu" then n else share.guestPath}'/>
+        ${ifQemu (optionalString share.readOnly "<readonly/>")}
       </filesystem>
     '') cfg.fileShares))
     cfg.extraDevices
   ];
 
-  libvirtDomain = ''
+  libvirtQemuDomain = ''
     <domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
       <name>${cfg.name}</name>
       <uuid>${cfg.uuid}</uuid>
@@ -71,13 +76,51 @@ let
     </domain>
   '';
 
+  libvirtLxcDomain = ''
+    <domain type='lxc'>
+      <name>${cfg.name}</name>
+      <uuid>${cfg.uuid}</uuid>
+      <memory unit='M'>${toString cfg.memory}</memory>
+      <currentMemory unit='M'>${toString cfg.memory}</currentMemory>
+      <vcpu placement='static'>${toString cfg.cpuCount}</vcpu>
+      <os>
+        <type>exe</type>
+        <init>${sys}/init</init>
+      </os>
+      <features>
+        <capabilities policy='default'>
+          <mknod state='on'/>
+        </capabilities>
+      </features>
+      <idmap>
+        <uid start='0' target='${cfg.lxc.mappedUid}' count='1000'/>
+        <gid start='0' target='${cfg.lxc.mappedGid}' count='1000'/>
+      </idmap>
+      <clock offset='utc'/>
+      <on_poweroff>destroy</on_poweroff>
+      <on_reboot>destroy</on_reboot>
+      <on_crash>destroy</on_crash>
+      <devices>${concatStrings libvirtDevices}</devices>
+    </domain>
+  '';
+
+  libvirtDomain = ({
+    qemu = libvirtQemuDomain;
+    lxc = libvirtLxcDomain;
+  }).${cfg.backend};
+
 in {
   imports = [
-    <imsl-nix-modules/builders/nixos.nix>
+    ./nixos.nix
   ];
 
   options = {
     libvirt = {
+      backend = mkOption {
+        type = types.enum [ "qemu" "lxc" ];
+        default = "qemu";
+      };
+
       xml = mkOption {
         type = types.str;
         default = libvirtDomain;
@@ -113,6 +156,17 @@ in {
         type = types.int;
         default = 2;
       };
+      lxc = {
+        mappedUid = mkOption {
+          type = types.str;
+        };
+        mappedGid = mkOption {
+          type = types.str;
+        };
+        rootPath = mkOption {
+          type = types.str;
+        };
+      };
       fileShares = mkOption {
         type = with types; attrsOf (submodule {
           options = {
@@ -127,6 +181,10 @@ in {
               default = false;
             };
             readOnly = mkOption {
+              type = types.bool;
+              default = true;
+            };
+            mount = mkOption {
               type = types.bool;
               default = true;
             };
@@ -165,6 +223,12 @@ in {
       neededForBoot = true;
     };
 
+    libvirt.fileShares.root = mkIf (cfg.backend == "lxc") {
+      hostPath = cfg.lxc.rootPath;
+      guestPath = "/";
+      mount = false;
+    };
+
     nixos.modules = singleton {
       boot = {
         kernelParams = [ "logo.nologo" ];
@@ -172,13 +236,33 @@ in {
         kernelModules = [ "virtio_net" ];
         loader.grub.enable = false;
         vesa = false;
+        isContainer = cfg.backend == "lxc";
       };
 
       networking.usePredictableInterfaceNames = false;
 
       i18n.consoleFont = "";
 
-      fileSystems = mkMerge (
+      systemd = mkIf (cfg.backend == "lxc") {
+        services.console-getty.enable = false;
+        services.systemd-udevd.enable = false;
+        sockets.systemd-journald-audit.enable = false;
+        sockets.systemd-udevd-control.enable = false;
+        sockets.systemd-udevd-kernel.enable = false;
+        automounts = [
+          { where = "/proc/sys/fs/binfmt_misc";
+            enable = false;
+          }
+        ];
+        mounts = [
+          { where = "/dev/hugepages";
+            enable = false; }
+          { where = "/sys/kernel/debug";
+            enable = false; }
+        ];
+      };
+
+      fileSystems = mkIf (cfg.backend != "lxc") (mkMerge (
         singleton {
           "/" = {
             fsType = "tmpfs";
@@ -196,8 +280,8 @@ in {
               (if share.readOnly then "ro" else "rw")
             ];
           };
-        }) config.libvirt.fileShares
-      );
+        }) (filterAttrs (_: s: s.mount) config.libvirt.fileShares)
+      ));
     };
 
   };

@@ -35,6 +35,12 @@ let
       _module.args = { inherit pkgs; };
 
       libvirt = {
+        backend = cfg.backend;
+        lxc = mkIf (cfg.backend == "lxc") {
+          mappedUid = "@uid@";
+          mappedGid = "@gid@";
+          rootPath = "root-${name}";
+        };
         name = "${name}-@uuid@";
         netdevs.eth0 = {
           mac = null;
@@ -50,6 +56,8 @@ let
       };
 
       nixos.modules = singleton {
+        services.nscd.enable = cfg.backend != "lxc";
+        users.extraUsers.root.password = "root";
         services.journald.extraConfig = ''
           Storage=volatile
           ForwardToConsole=yes
@@ -60,10 +68,10 @@ let
           firewall.enable = false;
           useDHCP = false;
           usePredictableInterfaceNames = false;
-          interfaces.eth0.ip4 = singleton {
-            prefixLength = 16;
-            address = config.ip;
-          };
+          localCommands = ''
+            ip addr add ${config.ip}/16 dev eth0
+            ip link set dev eth0 up
+          '';
           extraHosts = concatStringsSep "\n" (mapAttrsToList (name: i:
             "${i.ip} ${concatStringsSep " " ([name] ++ i.extraHostNames)}"
           ) cfg.instances);
@@ -101,9 +109,16 @@ in {
         type = types.path;
       };
 
+      backend = mkOption {
+        type = types.enum [ "qemu" "lxc" ];
+        default = "qemu";
+      };
+
       connectionURI = mkOption {
         type = types.str;
-        default = "qemu:///system";
+        default =
+          if cfg.backend == "qemu" then "qemu:///system"
+          else "lxc:///";
       };
 
       defaultInstanceConfig = mkOption {
@@ -213,6 +228,12 @@ in {
         uuid="$(uuidgen -r)"
         pwd="$(pwd)"
 
+        ${optionalString (cfg.backend == "lxc") ''
+          mkdir root-{${concatMapStringsSep "," (n: ''"${n}"'') (attrNames cfg.instances)}}
+          uid="$(id -u)"
+          gid="$(id -g)"
+        ''}
+
         echo "Test UUID: $uuid"
 
         mkdir -p out/logs out/libvirt
@@ -222,7 +243,7 @@ in {
 
         for f in out/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
 
-        # Let qemu access paths inside the build directory and write to out dir
+        # Let libvirt access paths inside the build directory and write to out dir
         chmod a+x .
         chmod a+w out
 

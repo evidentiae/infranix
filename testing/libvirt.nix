@@ -13,7 +13,7 @@ let
 
   instanceOpts = { name, config, lib, ... }: {
     imports = [
-      ../builders/libvirt-qemu.nix
+      ../builders/libvirt.nix
       cfg.defaultInstanceConfig
     ];
 

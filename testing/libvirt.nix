@@ -7,6 +7,25 @@ let
 
   cfg = config.libvirt.test;
 
+  ztail = pkgs.haskell.packages.ghc784.callPackage (
+    { mkDerivation, array, base, containers, filepath, hinotify
+    , old-locale, process, regex-compat, stdenv, time, unix
+    }:
+    mkDerivation {
+      pname = "ztail";
+      version = "1.1";
+      sha256 = "11x6whwyfgdgda5bhdck0k12inzix8cjfm42hh09p703nalk07nq";
+      isLibrary = false;
+      isExecutable = true;
+      executableHaskellDepends = [
+        array base containers filepath hinotify old-locale process
+        regex-compat time unix
+      ];
+      description = "Multi-file, colored, filtered log tailer";
+      license = stdenv.lib.licenses.bsd3;
+    }
+  ) {};
+
   inherit (import ../lib.nix) hexByteToInt mkMAC;
 
   ips = mapAttrs (_: i: i.ip) cfg.instances;
@@ -46,16 +65,17 @@ let
           mac = null;
           network = "net-@testid@";
         };
-        consoleFile = "@pwd@/out/hosts/${name}/console.log";
+        consoleFile = "@build@/hosts/${name}/console.log";
         extraDevices = ''
           <serial type='file'>
-            <source path='@pwd@/out/hosts/${name}/journal.log'/>
+            <source path='@build@/hosts/${name}/journal.log'/>
             <target port='1'/>
           </serial>
         '';
         fileShares.out = {
           guestPath = "/out";
-          hostPath = "out/hosts/${name}";
+          hostPath = if name == cfg.test-driver.hostName
+                     then "/@build@" else "/@build@/hosts/${name}";
           readOnly = false;
         };
       };
@@ -88,9 +108,13 @@ let
   instNames = attrNames cfg.instances;
   instList = concatMapStringsSep "," (n: ''"${n}"'') instNames;
 
+  padName = n:
+    if any (n': stringLength n' > stringLength n) instNames
+    then padName "${n} " else n;
+
   virshCmds = concatStringsSep ";" (flatten [
-    "net-create out/libvirt/net-test.xml"
-    (map (name: "create out/libvirt/dom-${name}.xml --autodestroy") instNames)
+    "net-create $build/libvirt/net-test.xml"
+    (map (name: "create $build/libvirt/dom-${name}.xml --autodestroy") instNames)
     "event --timeout ${toString cfg.timeout} --domain $testid --event lifecycle"
     "net-destroy net-$testid"
   ]);
@@ -165,11 +189,11 @@ in {
           any Nix build.
         '';
         default = ''
-          if ! [ -a "$output/hosts/test-driver/script.exit" ]; then
+          if ! [ -a "$output/hosts/${cfg.test-driver.hostName}/script.exit" ]; then
             echo >&2 "Test script exit code not found. Possible test timeout"
             exit 1
           fi
-          ex="$(cat "$output/hosts/test-driver/script.exit")"
+          ex="$(cat "$output/hosts/${cfg.test-driver.hostName}/script.exit")"
           if ! [ "$ex" = "0" ]; then
             echo >&2 "Test script failed with exit code $ex"
             exit 1
@@ -178,6 +202,11 @@ in {
       };
 
       test-driver = {
+        hostName = mkOption {
+          type = types.str;
+          default = "driver";
+        };
+
         script = mkOption {
           type = types.path;
           description = ''
@@ -209,7 +238,7 @@ in {
 
   config = {
 
-    libvirt.test.instances.test-driver = {
+    libvirt.test.instances.${cfg.test-driver.hostName} = {
       libvirt.name = mkForce "@testid@";
       nixos.modules = cfg.test-driver.extraModules ++ [{
         systemd.services.test-script = {
@@ -222,7 +251,7 @@ in {
             Type = "oneshot";
             ExecStart = "${pkgs.writeScriptBin "test-script" ''
               #!${bash}/bin/bash
-              "${cfg.test-driver.script}" > script.stdout 2> script.stderr
+              "${cfg.test-driver.script}" >> script.stdout 2>> script.stderr
               echo "$?" > script.exit
               sync -f .
               ${pkgs.systemd}/bin/systemctl poweroff --force
@@ -253,7 +282,7 @@ in {
         ${concatStrings (mapAttrsToList (n: i: ''
           ln -sv "${i.libvirt.xmlFile}" "$out/dom-${n}.xml"
         '') cfg.instances)}
-        ln -sv  "${libvirtNetwork}" "$out/net-test.xml"
+        ln -s "${libvirtNetwork}" "$out/net-test.xml"
       '';
 
       phases = [ "buildPhase" "installPhase" "fixupPhase" ];
@@ -279,31 +308,42 @@ in {
         # Variables that are substituted within the libvirt XML files
         testid="$(basename "$out")"
         testid="''${testid%%-*}"
-        pwd="$(pwd)"
+        build="$(pwd)/build"
         uid="$(id -u)"
         gid="$(id -g)"
 
         # Setup directories and libvirt XML files
-        mkdir -p out/libvirt out/hosts/{${instList}}
-        touch out/hosts/{${instList}}/{console,journal}.log
-        cp -t out/libvirt "$src"/*
-        for f in out/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
+        mkdir -p $build/libvirt $build/hosts/{${instList}}
+        touch $build/hosts/{${instList}}/{console,journal}.log
+        touch $build/script.std{out,err}
+        cp -t $build/libvirt "$src"/*
+        for f in $build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
         ${optionalString (cfg.backend == "lxc") "mkdir root-{${instList}}"}
 
-        # Let libvirt access paths inside the build directory and write to out dir
+        # Let libvirt access paths inside the build directory and write to out dirs
         chmod a+x .
-        chmod a+w out/hosts/*
+        chmod a+w $build $build/script.std{out,err} $build/hosts/*
 
-        tail -Fq out/hosts/test-driver/script.std{out,err} \
-          out/hosts/{${instList}}/{console,journal}.log 2>/dev/null &
+        ${ztail}/bin/ztail -i 1 \
+          -bh "${padName "OUT"} " $build/script.stdout \
+          -bh "${padName "ERR"} " -c red $build/script.stderr \
+          ${concatStringsSep " " (
+            concatMap (n: map (f: ''-bh "${padName n} " "$build/hosts/${n}/${f}"'') [
+              "console.log" "journal.log"
+            ]) instNames
+          )} &
 
         ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
           "${virshCmds}" >/dev/null || exit 1
 
+        sleep 3 # try to let ztail finish
         cleanup
       '';
 
-      installPhase = "mv out $out";
+      installPhase = ''
+        mkdir $out
+        cp -r build/* $out/
+      '';
     };
 
   };

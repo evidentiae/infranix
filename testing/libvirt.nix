@@ -189,11 +189,11 @@ in {
           any Nix build.
         '';
         default = ''
-          if ! [ -a "$output/hosts/${cfg.test-driver.hostName}/script.exit" ]; then
+          if ! [ -a "$output/script.exit" ]; then
             echo >&2 "Test script exit code not found. Possible test timeout"
             exit 1
           fi
-          ex="$(cat "$output/hosts/${cfg.test-driver.hostName}/script.exit")"
+          ex="$(cat "$output/script.exit")"
           if ! [ "$ex" = "0" ]; then
             echo >&2 "Test script failed with exit code $ex"
             exit 1

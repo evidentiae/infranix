@@ -298,7 +298,7 @@ in {
           out/hosts/{${instList}}/{console,journal}.log 2>/dev/null &
 
         ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-          "${virshCmds}" >/dev/null || true
+          "${virshCmds}" >/dev/null || exit 1
 
         cleanup
       '';

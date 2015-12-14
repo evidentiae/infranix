@@ -201,6 +201,15 @@ in {
         '';
       };
 
+      extraBuildSteps = mkOption {
+        type = types.lines;
+        default = "";
+        description = ''
+          Extra build steps that is run as the last part of the build phase
+          for the <code>output</code> build.
+        '';
+      };
+
       test-driver = {
         hostName = mkOption {
           type = types.str;
@@ -285,7 +294,7 @@ in {
         ln -s "${libvirtNetwork}" "$out/net-test.xml"
       '';
 
-      phases = [ "buildPhase" "installPhase" "fixupPhase" ];
+      phases = [ "buildPhase" ];
 
       buildPhase = ''
         function cleanup() {
@@ -337,12 +346,13 @@ in {
           "${virshCmds}" >/dev/null || exit 1
 
         sleep 3 # try to let ztail finish
-        cleanup
-      '';
 
-      installPhase = ''
         mkdir $out
         cp -r build/* $out/
+
+        ${cfg.extraBuildSteps}
+
+        cleanup
       '';
     };
 

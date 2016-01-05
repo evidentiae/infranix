@@ -7,25 +7,6 @@ let
 
   cfg = config.libvirt.test;
 
-  ztail = pkgs.haskell.packages.ghc784.callPackage (
-    { mkDerivation, array, base, containers, filepath, hinotify
-    , old-locale, process, regex-compat, stdenv, time, unix
-    }:
-    mkDerivation {
-      pname = "ztail";
-      version = "1.1";
-      sha256 = "11x6whwyfgdgda5bhdck0k12inzix8cjfm42hh09p703nalk07nq";
-      isLibrary = false;
-      isExecutable = true;
-      executableHaskellDepends = [
-        array base containers filepath hinotify old-locale process
-        regex-compat time unix
-      ];
-      description = "Multi-file, colored, filtered log tailer";
-      license = stdenv.lib.licenses.bsd3;
-    }
-  ) {};
-
   inherit (import ../lib.nix) hexByteToInt mkMAC;
 
   ips = mapAttrs (_: i: i.ip) cfg.instances;
@@ -109,7 +90,7 @@ let
   instList = concatMapStringsSep "," (n: ''"${n}"'') instNames;
 
   padName = n:
-    if any (n': stringLength n' > stringLength n) instNames
+    if any (n': stringLength n' > stringLength n) (attrNames cfg.tailFiles)
     then padName "${n} " else n;
 
   virshCmds = concatStringsSep ";" (flatten [
@@ -210,6 +191,15 @@ in {
         '';
       };
 
+      tailFiles = mkOption {
+        type = with types; attrsOf str;
+        default = {
+          OUT = "script.stdout";
+          ERR = "script.stderr";
+        } // genAttrs instNames (n: "hosts/${n}/console.log")
+          // genAttrs instNames (n: "hosts/${n}/journal.log");
+      };
+
       test-driver = {
         hostName = mkOption {
           type = types.str;
@@ -297,22 +287,13 @@ in {
       phases = [ "buildPhase" ];
 
       buildPhase = ''
-        function cleanup() {
-          local jobs="$(jobs -p)"
-          test -n "$jobs" && kill $jobs || true
-        }
-
-        function waitForFile() {
-          local file="$1"
-          local n=0
-          while [[ ! -a "$file" ]] && (($n < ${toString cfg.timeout})); do
-            n=$((n+1))
-            sleep 1
+        function prettytail() {
+          local header="$1"
+          local file="$2"
+          tail --pid $virshpid -F "$file" | while read l; do
+            printf "%s %s\n" "$header" "$l"
           done
-          if ! [ -a "$file" ]; then return 1; fi
         }
-
-        trap cleanup SIGTERM SIGKILL EXIT
 
         # Variables that are substituted within the libvirt XML files
         testid="$(basename "$out")"
@@ -333,26 +314,20 @@ in {
         chmod a+x .
         chmod a+w $build $build/script.std{out,err} $build/hosts/*
 
-        ${ztail}/bin/ztail -i 1 \
-          -bh "${padName "OUT"} " $build/script.stdout \
-          -bh "${padName "ERR"} " -c red $build/script.stderr \
-          ${concatStringsSep " " (
-            concatMap (n: map (f: ''-bh "${padName n} " "$build/hosts/${n}/${f}"'') [
-              "console.log" "journal.log"
-            ]) instNames
-          )} &
-
         ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-          "${virshCmds}" >/dev/null || exit 1
+          "${virshCmds}" >/dev/null &
+        virshpid=$!
 
-        sleep 3 # try to let ztail finish
+        ${concatStrings (mapAttrsToList (n: f: ''
+          prettytail "${padName n}" "$build/${f}" &
+        '') cfg.tailFiles)}
+
+        wait $virshpid || exit 1
 
         mkdir $out
         cp -r build/* $out/
 
         ${cfg.extraBuildSteps}
-
-        cleanup
       '';
     };
 

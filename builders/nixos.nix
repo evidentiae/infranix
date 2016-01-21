@@ -63,7 +63,7 @@ with builtins;
           builtins = builtins // overrides;
         };
         in let inherit (overrides) __nixPath;
-        in scopedImport overrides "${toString pkgs.path}/nixos" {
+        in scopedImport overrides <nixpkgs/nixos> {
           configuration = {
             imports = config.nixos.modules;
           };

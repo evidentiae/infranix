@@ -40,7 +40,7 @@ let
       };
     };
     config = {
-      path = "/run/secrets/${secretName+name}";
+      path = "/run/secrets/${secretName}.${name}";
     };
   };
 

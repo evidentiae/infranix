@@ -12,8 +12,8 @@ let
     #!${bash}/bin/bash
     mkdir -p "$(dirname "${svc.path}")"
     touch "${svc.path}"
-    chmod 0600 "${svc.path}"
-    chown "${svc.user}".root "${svc.path}"
+    chmod ${if svc.group == "root" then "0400" else "0440"} "${svc.path}"
+    chown "${svc.user}"."${svc.group}" "${svc.path}"
     echo "decrypting ${svc.path}"
     ${config.crypto.decrypter} "${encryptSecret secret}" > "${svc.path}"
   '';
@@ -37,6 +37,10 @@ let
           if topConfig.systemd.services ? ${name}.serviceConfig.User
           then topConfig.systemd.services.${name}.serviceConfig.User
           else "root";
+      };
+      group = mkOption {
+        type = types.str;
+        default = "root";
       };
     };
     config = {

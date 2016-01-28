@@ -21,6 +21,7 @@ let
   encryptSecret = secret: toFile "sec" (readFile (stdenv.mkDerivation {
     name = "encryptedsecret";
     phases = [ "buildPhase" ];
+    preferLocalBuild = true;
     buildPhase = ''
       ${config.crypto.encrypter} "${secret.plaintextPath}" > "$out"
     '';

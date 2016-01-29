@@ -7,6 +7,7 @@ with builtins;
 let
 
   topConfig = config;
+  cfg = config.crypto;
 
   decryptSecretScript = secret: svc: writeScript "decrypt-secret" ''
     #!${bash}/bin/bash
@@ -14,8 +15,16 @@ let
     touch "${svc.path}"
     chmod ${if svc.group == "root" then "0400" else "0440"} "${svc.path}"
     chown "${svc.user}"."${svc.group}" "${svc.path}"
-    echo "decrypting ${svc.path}"
-    ${config.crypto.decrypter} "${encryptSecret secret}" > "${svc.path}"
+    ${if cfg.dummy then ''
+      echo "copying dummy secret ${secret.dummyContents} to ${svc.path}"
+      cat "${secret.dummyContents}" > "${svc.path}"
+    '' else if hasPrefix storeDir secret.plaintextPath then ''
+      echo "copying plaintext ${secret.plaintextPath} to ${svc.path}"
+      cat "${secret.plaintextPath}" > "${svc.path}"
+    '' else ''
+      echo "decrypting ${svc.path}"
+      ${config.crypto.decrypter} "${encryptSecret secret}" > "${svc.path}"
+    ''}
   '';
 
   encryptSecret = secret: toFile "sec" (readFile (stdenv.mkDerivation {
@@ -57,6 +66,9 @@ let
       };
       plaintextPath = mkOption {
         type = types.str;
+      };
+      dummyContents = mkOption {
+        type = types.package;
       };
     };
   };
@@ -109,6 +121,10 @@ in {
   options = {
 
     crypto = {
+      dummy = mkOption {
+        type = types.bool;
+        default = false;
+      };
       decrypter = mkOption {
         type = types.path;
         description = ''

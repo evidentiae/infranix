@@ -79,11 +79,11 @@ let
       secret.services
   ) config.crypto.secrets);
 
-  dependentServices = map ({secretName, secret, svcName, svc}: {
-    ${svcName} = {
-      restartTriggers = singleton (decryptSecretScript secret svc);
-    };
-  }) allSecretSvcs;
+  dependentServices = genAttrs (unique (map (s: s.svcName) allSecretSvcs)) (svcName: {
+    restartTriggers = singleton (hashString "sha256" (concatMapStrings (
+      {secret, svc, ...}: decryptSecretScript secret svc
+    ) (filter (s: s.svcName == svcName) allSecretSvcs)));
+  });
 
   decryptServices = mapAttrsToList (secretName: secret: {
     "secret-${secretName}" = rec {
@@ -151,7 +151,7 @@ in {
 
   config = mkIf (config.crypto.secrets != {}) {
     systemd.services = mkMerge (
-      dependentServices ++ decryptServices ++ purgeOldSecrets
+      [dependentServices] ++ decryptServices ++ purgeOldSecrets
     );
   };
 

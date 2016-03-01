@@ -79,7 +79,7 @@ let
             ip link set dev eth0 up
           '';
           extraHosts = concatStringsSep "\n" (mapAttrsToList (name: i:
-            "${i.ip} ${concatStringsSep " " ([name] ++ i.extraHostNames)}"
+            "${i.ip} ${concatStringsSep " " ([name] ++ (map (removeSuffix ".") i.extraHostNames))}"
           ) cfg.instances);
         };
       };

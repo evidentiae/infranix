@@ -118,21 +118,11 @@ in {
         default = 600;
       };
 
-      out = {
-        result = mkOption {
-          type = types.path;
-          description = ''
-            The result of the test, as a nix derivation. This build
-            fails if the verification script fails.
-          '';
-        };
-        output = mkOption {
-          type = types.path;
-          description = ''
-            The output produced by the test, as a nix derivation.
-            This build always succeed.
-          '';
-        };
+      out = mkOption {
+        type = types.path;
+        description = ''
+          The result of the test, as a nix derivation.
+        '';
       };
 
       backend = mkOption {
@@ -157,31 +147,6 @@ in {
         type = with types; attrsOf (submodule instanceOpts);
       };
 
-      verification-script = mkOption {
-        type = types.lines;
-        description = ''
-          A script that will be inlined in the build phase of the
-          result builder. The environment variable <code>output</output>
-          will point to the directory containing the build output.
-          By default, the output is checked for the existence of a
-          successful exit code file from the test script.
-          You can also use this script to do post-processing of the
-          test output, by writing to the <code>out</code> path like
-          any Nix build.
-        '';
-        default = ''
-          if ! [ -a "$output/script.exit" ]; then
-            echo >&2 "Test script exit code not found. Possible test timeout"
-            exit 1
-          fi
-          ex="$(cat "$output/script.exit")"
-          if ! [ "$ex" = "0" ]; then
-            echo >&2 "Test script failed with exit code $ex"
-            exit 1
-          fi
-        '';
-      };
-
       extraBuildSteps = mkOption {
         type = types.lines;
         default = "";
@@ -194,8 +159,8 @@ in {
       tailFiles = mkOption {
         type = with types; attrsOf str;
         default = {
-          OUT = "script.stdout";
-          ERR = "script.stderr";
+          OUT = "stdout";
+          ERR = "stderr";
         } // genAttrs instNames (n: "hosts/${n}/console.log")
           // genAttrs instNames (n: "hosts/${n}/journal.log");
       };
@@ -250,8 +215,7 @@ in {
             Type = "oneshot";
             ExecStart = "${pkgs.writeScriptBin "test-script" ''
               #!${bash}/bin/bash
-              "${cfg.test-driver.script}" >> script.stdout 2>> script.stderr
-              echo "$?" > script.exit
+              "${cfg.test-driver.script}" >> stdout 2>> stderr || touch failed
               sync -f .
               ${pkgs.systemd}/bin/systemctl poweroff --force
             ''}/bin/test-script";
@@ -260,21 +224,8 @@ in {
       }];
     };
 
-    libvirt.test.out.result = pkgs.stdenv.mkDerivation {
-      name = "test-result";
-
-      phases = [ "buildPhase" ];
-
-      buildPhase = ''
-        export output="${cfg.out.output}"
-        echo "Verifying test output $output"
-        ${cfg.verification-script}
-        test -a "$out" || mkdir "$out"
-      '';
-    };
-
-    libvirt.test.out.output = pkgs.stdenv.mkDerivation {
-      name = "test-output";
+    libvirt.test.out = pkgs.stdenv.mkDerivation {
+      name = "libvirt-test";
 
       src = runCommand "test-src" {} ''
         mkdir $out
@@ -285,6 +236,16 @@ in {
       '';
 
       phases = [ "buildPhase" ];
+
+      buildInputs = singleton (
+        writeScriptBin "extra-build-steps" ''
+          #!${bash}/bin/bash
+          set -e
+          ${cfg.extraBuildSteps}
+        ''
+      );
+
+      succeedOnFailure = true;
 
       buildPhase = ''
         function prettytail() {
@@ -303,17 +264,17 @@ in {
         gid="$(id -g)"
 
         # Setup directories and libvirt XML files
-        mkdir -p $build/libvirt $build/hosts/{${instList}}
-        touch $build/hosts/{${instList}}/{console,journal}.log
-        touch $build/script.std{out,err}
-        cp -t $build/libvirt "$src"/*
-        for f in $build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
+        mkdir -p build/libvirt build/hosts/{${instList}}
+        touch build/std{out,err} build/hosts/{${instList}}/{console,journal}.log
+        cp -t build/libvirt "$src"/*
+        for f in build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
         ${optionalString (cfg.backend == "lxc") "mkdir root-{${instList}}"}
 
         # Let libvirt access paths inside the build directory and write to out dirs
         chmod a+x .
-        chmod a+w $build $build/script.std{out,err} $build/hosts/*
+        chmod a+w build build/std{out,err} build/hosts/*
 
+        # Start the libvirt machines
         ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
           "${virshCmds}" >/dev/null &
         virshpid=$!
@@ -322,12 +283,25 @@ in {
           prettytail "${padName n}" "$build/${f}" &
         '') cfg.tailFiles)}
 
-        wait $virshpid || exit 1
+        # Wait for the test script to finish and then run any extra steps
+        wait $virshpid && out=$out extra-build-steps || touch build/failed
 
-        mkdir $out
-        cp -r build/* $out/
+        # Put build products in place
+        cp -rnT build $out
+        mkdir -p $out/nix-support
 
-        ${cfg.extraBuildSteps}
+        (
+          echo "file log $out/stdout"
+          echo "file log $out/stderr"
+          for i in ${toString instNames}; do for l in console journal; do
+            echo "file log $out/hosts/$i/$l.log"
+          done; done
+        ) >> $out/nix-support/hydra-build-products
+
+        if [ -a $out/failed ]; then
+          rm $out/failed
+          exit 1
+        fi
       '';
     };
 

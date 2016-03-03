@@ -46,10 +46,10 @@ let
           mac = null;
           network = "net-@testid@";
         };
-        consoleFile = "@build@/hosts/${name}/console.log";
+        consoleFile = "@build@/log/${name}-console.log";
         extraDevices = ''
           <serial type='file'>
-            <source path='@build@/hosts/${name}/journal.log'/>
+            <source path='@build@/log/${name}-journal.log'/>
             <target port='1'/>
           </serial>
         '';
@@ -159,10 +159,10 @@ in {
       tailFiles = mkOption {
         type = with types; attrsOf str;
         default = {
-          OUT = "stdout";
-          ERR = "stderr";
-        } // genAttrs instNames (n: "hosts/${n}/console.log")
-          // genAttrs instNames (n: "hosts/${n}/journal.log");
+          OUT = "log/stdout";
+          ERR = "log/stderr";
+        } // genAttrs instNames (n: "log/${n}-console.log")
+          // genAttrs instNames (n: "log/${n}-journal.log");
       };
 
       test-driver = {
@@ -215,7 +215,7 @@ in {
             Type = "oneshot";
             ExecStart = "${pkgs.writeScriptBin "test-script" ''
               #!${bash}/bin/bash
-              "${cfg.test-driver.script}" >> stdout 2>> stderr || touch failed
+              "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr || touch failed
               sync -f .
               ${pkgs.systemd}/bin/systemctl poweroff --force
             ''}/bin/test-script";
@@ -264,15 +264,15 @@ in {
         gid="$(id -g)"
 
         # Setup directories and libvirt XML files
-        mkdir -p build/libvirt build/hosts/{${instList}}
-        touch build/std{out,err} build/hosts/{${instList}}/{console,journal}.log
+        mkdir -p build/{log,libvirt} build/hosts/{${instList}}
+        touch build/log/std{out,err} build/log/{${instList}}-{console,journal}.log
         cp -t build/libvirt "$src"/*
         for f in build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
         ${optionalString (cfg.backend == "lxc") "mkdir root-{${instList}}"}
 
         # Let libvirt access paths inside the build directory and write to out dirs
         chmod a+x .
-        chmod a+w build build/std{out,err} build/hosts/*
+        chmod a+w -R build
 
         # Start the libvirt machines
         ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
@@ -291,10 +291,10 @@ in {
         mkdir -p $out/nix-support
 
         (
-          echo "file log $out/stdout"
-          echo "file log $out/stderr"
+          echo "file log $out/log/stdout"
+          echo "file log $out/log/stderr"
           for i in ${toString instNames}; do for l in console journal; do
-            echo "file log $out/hosts/$i/$l.log"
+            echo "file log $out/log/$i-$l.log"
           done; done
         ) >> $out/nix-support/hydra-build-products
 

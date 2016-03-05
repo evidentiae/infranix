@@ -274,7 +274,7 @@ in {
             fsType = "9p";
             device = id;
             inherit (share) neededForBoot;
-            options = concatStringsSep "," [
+            options = [
               "trans=virtio"
               "version=9p2000.L"
               (if share.readOnly then "ro" else "rw")

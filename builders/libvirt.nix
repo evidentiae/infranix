@@ -267,7 +267,7 @@ in {
           "/" = {
             fsType = "tmpfs";
             device = "tmpfs";
-            options = "mode=0755";
+            options = [ "mode=0755" ];
           };
         } ++ mapAttrsToList (id: share: {
           "${share.guestPath}" = {

@@ -42,6 +42,7 @@ let
           rootPath = "root-${name}";
         };
         name = "${name}-@testid@";
+        uuid = null;
         netdevs.eth0 = {
           mac = null;
           network = "net-@testid@";
@@ -261,7 +262,7 @@ in {
 
         # Variables that are substituted within the libvirt XML files
         testid="$(basename "$out")"
-        testid="''${testid%%-*}-$RANDOM"
+        testid="''${testid%%-*}"
         build="$(pwd)/build"
         uid="$(id -u)"
         gid="$(id -g)"

@@ -56,7 +56,7 @@ let
   libvirtQemuDomain = ''
     <domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
       <name>${cfg.name}</name>
-      <uuid>${cfg.uuid}</uuid>
+      ${optionalString (cfg.uuid != null) "<uuid>${cfg.uuid}</uuid>"}
       <memory unit='M'>${toString cfg.memory}</memory>
       <currentMemory unit='M'>${toString cfg.memory}</currentMemory>
       <vcpu placement='static'>${toString cfg.cpuCount}</vcpu>
@@ -83,7 +83,7 @@ let
   libvirtLxcDomain = ''
     <domain type='lxc'>
       <name>${cfg.name}</name>
-      <uuid>${cfg.uuid}</uuid>
+      ${optionalString (cfg.uuid != null) "<uuid>${cfg.uuid}</uuid>"}
       <memory unit='M'>${toString cfg.memory}</memory>
       <currentMemory unit='M'>${toString cfg.memory}</currentMemory>
       <vcpu placement='static'>${toString cfg.cpuCount}</vcpu>
@@ -146,7 +146,7 @@ in {
       };
       uuid = mkOption {
         default = mkUUID cfg.name;
-        type = types.str;
+        type = with types; nullOr str;
       };
       consoleFile = mkOption {
         type = with types; nullOr str;

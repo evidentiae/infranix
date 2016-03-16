@@ -157,12 +157,12 @@ in {
       };
 
       tailFiles = mkOption {
-        type = with types; attrsOf str;
+        type = with types; attrsOf (listOf str);
         default = {
-          OUT = "log/stdout";
-          ERR = "log/stderr";
-        } // genAttrs instNames (n: "log/${n}-console.log")
-          // genAttrs instNames (n: "log/${n}-journal.log");
+          OUT = [ "log/stdout" ];
+          ERR = [ "log/stderr" ];
+        } // genAttrs instNames (n: [ "log/${n}-console.log" ])
+          // genAttrs instNames (n: [ "log/${n}-journal.log" ]);
       };
 
       test-driver = {
@@ -252,7 +252,7 @@ in {
           local header="$1"
           local file="$2"
           tail --pid $virshpid -F "$file" | while read l; do
-            printf "%s %s\n" "$header" "$l"
+            printf "%s%s\n" "$header" "$l"
           done
         }
 
@@ -279,9 +279,9 @@ in {
           "${virshCmds}" >/dev/null &
         virshpid=$!
 
-        ${concatStrings (mapAttrsToList (n: f: ''
+        ${concatStrings (flatten (mapAttrsToList (n: fs: map (f: ''
           prettytail "${padName n}" "$build/${f}" &
-        '') cfg.tailFiles)}
+        '') fs) cfg.tailFiles))}
 
         # Wait for the test script to finish and then run any extra steps
         wait $virshpid && out=$out extra-build-steps || touch build/failed

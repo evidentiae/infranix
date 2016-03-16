@@ -261,7 +261,7 @@ in {
 
         # Variables that are substituted within the libvirt XML files
         testid="$(basename "$out")"
-        testid="''${testid%%-*}"
+        testid="''${testid%%-*}-$RANDOM"
         build="$(pwd)/build"
         uid="$(id -u)"
         gid="$(id -g)"

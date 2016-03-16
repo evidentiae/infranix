@@ -279,7 +279,7 @@ in {
 
         # Start the libvirt machines
         ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-          "${virshCmds}" >/dev/null &
+          "${virshCmds}" >/dev/null || touch build/failed &
         virshpid=$!
 
         ${concatStrings (flatten (mapAttrsToList (n: fs: map (f: ''

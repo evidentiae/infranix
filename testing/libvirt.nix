@@ -227,13 +227,16 @@ in {
     libvirt.test.out = pkgs.stdenv.mkDerivation {
       name = "libvirt-test";
 
-      src = runCommand "test-src" {} ''
-        mkdir $out
-        ${concatStrings (mapAttrsToList (n: i: ''
-          ln -sv "${i.libvirt.xmlFile}" "$out/dom-${n}.xml"
-        '') cfg.instances)}
-        ln -s "${libvirtNetwork}" "$out/net-test.xml"
-      '';
+      src = runCommand "test-src"
+        { preferLocalBuild = true;
+          allowSubstitutes = false;
+        } ''
+          mkdir $out
+          ${concatStrings (mapAttrsToList (n: i: ''
+            ln -sv "${i.libvirt.xmlFile}" "$out/dom-${n}.xml"
+          '') cfg.instances)}
+          ln -s "${libvirtNetwork}" "$out/net-test.xml"
+        '';
 
       phases = [ "buildPhase" ];
 

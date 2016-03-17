@@ -41,7 +41,7 @@ let
           mappedGid = "@gid@";
           rootPath = "root-${name}";
         };
-        name = "${name}-@testid@";
+        name = "dom-@testid@-${name}";
         uuid = null;
         netdevs.eth0 = {
           mac = null;
@@ -97,7 +97,7 @@ let
   virshCmds = concatStringsSep ";" (flatten [
     "net-create $build/libvirt/net-test.xml"
     (map (name: "create $build/libvirt/dom-${name}.xml --autodestroy") instNames)
-    "event --timeout ${toString cfg.timeout} --domain $testid --event lifecycle"
+    "event --timeout ${toString cfg.timeout} --domain dom-$testid --event lifecycle"
     "net-destroy net-$testid"
   ]);
 
@@ -204,7 +204,7 @@ in {
   config = {
 
     libvirt.test.instances.${cfg.test-driver.hostName} = {
-      libvirt.name = mkForce "@testid@";
+      libvirt.name = mkForce "dom-@testid@";
       nixos.modules = cfg.test-driver.extraModules ++ [{
         systemd.services.test-script = {
           wantedBy = [ "multi-user.target" ];
@@ -263,6 +263,7 @@ in {
         # Variables that are substituted within the libvirt XML files
         testid="$(basename "$out")"
         testid="''${testid%%-*}"
+        testid="''${testid:0:7}"
         build="$(pwd)/build"
         uid="$(id -u)"
         gid="$(id -g)"

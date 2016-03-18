@@ -281,7 +281,7 @@ in {
 
         # Start the libvirt machines
         ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-          "${virshCmds}" >/dev/null || touch build/failed &
+          "${virshCmds}" >/dev/null &
         virshpid=$!
 
         ${concatStrings (flatten (mapAttrsToList (n: fs: map (f: ''
@@ -289,7 +289,8 @@ in {
         '') fs) cfg.tailFiles))}
 
         # Wait for the test script to finish and then run any extra steps
-        wait $virshpid && out=$out extra-build-steps || touch build/failed
+        wait -n $virshpid || touch build/failed
+        out=$out extra-build-steps || touch build/failed
 
         # Put build products in place
         cp -rnT build $out

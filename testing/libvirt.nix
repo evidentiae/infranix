@@ -216,7 +216,7 @@ in {
             Type = "oneshot";
             ExecStart = "${pkgs.writeScriptBin "test-script" ''
               #!${bash}/bin/bash
-              "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr || touch failed
+              "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr && touch success
               sync -f .
               ${pkgs.systemd}/bin/systemctl poweroff --force
             ''}/bin/test-script";
@@ -303,8 +303,8 @@ in {
           done; done
         ) >> $out/nix-support/hydra-build-products
 
-        if [ -a $out/failed ]; then
-          rm $out/failed
+        if [[ -a $out/failed || ! -a $out/success ]]; then
+          rm -f $out/failed $out/success
           exit 1
         fi
       '';

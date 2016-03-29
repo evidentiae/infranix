@@ -210,7 +210,13 @@ in {
           wantedBy = [ "multi-user.target" ];
           wants = [ "network.target" ];
           after = [ "network.target" ];
-          path = cfg.test-driver.scriptPath;
+          path = singleton (
+            buildEnv {
+              name = "script-path";
+              paths = cfg.test-driver.scriptPath;
+              pathsToLink = [ "/bin" "/sbin" ];
+            }
+          );
           serviceConfig = {
             WorkingDirectory = "/out";
             Type = "oneshot";

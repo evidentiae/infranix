@@ -296,7 +296,6 @@ in {
 
         # Wait for the test script to finish and then run any extra steps
         wait -n $virshpid || touch build/failed
-        out=$out extra-build-steps || touch build/failed
 
         # Put build products in place
         cp -rnT build $out
@@ -309,6 +308,8 @@ in {
             echo "file log $out/log/$i-$l.log"
           done; done
         ) >> $out/nix-support/hydra-build-products
+
+        out=$out extra-build-steps || touch build/failed
 
         if [[ -a $out/failed || ! -a $out/success ]]; then
           rm -f $out/failed $out/success

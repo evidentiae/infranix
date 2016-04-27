@@ -234,6 +234,8 @@ in {
     libvirt.test.out = pkgs.stdenv.mkDerivation {
       name = "libvirt-test";
 
+      requiredSystemFeatures = [ "libvirt" ];
+
       src = runCommand "test-src"
         { preferLocalBuild = true;
           allowSubstitutes = false;

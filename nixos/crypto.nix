@@ -9,22 +9,24 @@ let
   topConfig = config;
   cfg = config.crypto;
 
-  decryptSecretScript = secret: svc: writeScript "decrypt-secret" ''
+  decryptSecretsScript = svcName: writeScript "decrypt-secrets-${svcName}" ''
     #!${bash}/bin/bash
-    mkdir -p "$(dirname "${svc.path}")"
-    touch "${svc.path}"
-    chmod ${if svc.group == "root" then "0400" else "0440"} "${svc.path}"
-    chown "${svc.user}"."${svc.group}" "${svc.path}"
-    ${if cfg.dummy then ''
-      echo "copying dummy secret ${secret.dummyContents} to ${svc.path}"
-      cat "${secret.dummyContents}" > "${svc.path}"
-    '' else if hasPrefix storeDir secret.plaintextPath then ''
-      echo "copying plaintext ${secret.plaintextPath} to ${svc.path}"
-      cat "${secret.plaintextPath}" > "${svc.path}"
-    '' else ''
-      echo "decrypting ${svc.path}"
-      ${config.crypto.decrypter} "${encryptSecret secret}" > "${svc.path}"
-    ''}
+    ${concatMapStrings ({svc,secretName,secret}: ''
+      mkdir -p "$(dirname "${svc.path}")"
+      touch "${svc.path}"
+      chmod ${if svc.group == "root" then "0400" else "0440"} "${svc.path}"
+      chown "${svc.user}"."${svc.group}" "${svc.path}"
+      ${if cfg.dummy then ''
+        echo "copying dummy secret ${secret.dummyContents} to ${svc.path}"
+        cat "${secret.dummyContents}" > "${svc.path}"
+      '' else if hasPrefix storeDir secret.plaintextPath then ''
+        echo "copying plaintext ${secret.plaintextPath} to ${svc.path}"
+        cat "${secret.plaintextPath}" > "${svc.path}"
+      '' else ''
+        echo "decrypting ${svc.path}"
+        ${cfg.decrypter} "${encryptSecret secret}" > "${svc.path}"
+      ''}
+    '') (secretsForService svcName)}
   '';
 
   encryptSecret = secret: toFile "sec" (readFile (stdenv.mkDerivation {
@@ -32,7 +34,7 @@ let
     phases = [ "buildPhase" ];
     preferLocalBuild = true;
     buildPhase = ''
-      ${config.crypto.encrypter} "${secret.plaintextPath}" > "$out"
+      ${cfg.encrypter} "${secret.plaintextPath}" > "$out"
     '';
   }));
 
@@ -73,31 +75,38 @@ let
     };
   };
 
-  allSecretSvcs = flatten (mapAttrsToList (secretName: secret:
-    mapAttrsToList
-      (svcName: svc: { inherit secretName secret svcName svc; })
-      secret.services
-  ) config.crypto.secrets);
+  # String -> [{svc,secretName,secret}]
+  secretsForService = svcName: flatten (mapAttrsToList (secretName: secret:
+    let svc = findFirst ({name,value}: name == svcName) [] (
+      mapAttrsToList nameValuePair secret.services
+    ); in
+      if svc == [] then []
+      else { svc = svc.value; inherit secretName secret; }
+  ) cfg.secrets);
 
-  dependentServices = genAttrs (unique (map (s: s.svcName) allSecretSvcs)) (svcName: {
-    restartTriggers = singleton (hashString "sha256" (concatMapStrings (
-      {secret, svc, ...}: decryptSecretScript secret svc
-    ) (filter (s: s.svcName == svcName) allSecretSvcs)));
-  });
+  svcNames = unique (
+    concatMap (s: attrNames s.services) (attrValues cfg.secrets)
+  );
 
-  decryptServices = mapAttrsToList (secretName: secret: {
-    "secret-${secretName}" = rec {
-      wantedBy = map (s: s+".service") (attrNames secret.services);
+  dependentServices = map (svcName: {
+    ${svcName} = {
+      restartTriggers = singleton (hashString "sha256" (
+        "${decryptSecretsScript svcName}"
+      ));
+    };
+  }) svcNames;
+
+  decryptServices = map (svcName: {
+    "secrets-for-${svcName}" = rec {
+      wantedBy = [ "${svcName}.service" ];
       before = wantedBy;
-      script = concatMapStringsSep "\n"
-                 (svc: decryptSecretScript secret svc)
-                 (attrValues secret.services);
+      script = "${decryptSecretsScript svcName}";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
       };
     };
-  }) config.crypto.secrets;
+  }) svcNames;
 
   purgeOldSecrets = singleton {
     purge-old-secrets = {
@@ -105,7 +114,9 @@ let
       script = ''
         ${findutils}/bin/find /run/secrets -type f | ${gnugrep}/bin/grep -vf ${
           writeText "secret-paths" (
-            concatMapStringsSep "\n" (s: s.svc.path) allSecretSvcs
+            concatStringsSep "\n" (concatMap (svcName:
+              map ({svc,...}: svc.path) (secretsForService svcName)
+            ) svcNames)
           )
         } | ${findutils}/bin/xargs -r rm -v
       '';
@@ -151,7 +162,7 @@ in {
 
   config = mkIf (config.crypto.secrets != {}) {
     systemd.services = mkMerge (
-      [dependentServices] ++ decryptServices ++ purgeOldSecrets
+      dependentServices ++ decryptServices ++ purgeOldSecrets
     );
   };
 

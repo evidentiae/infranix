@@ -9,24 +9,28 @@ let
   topConfig = config;
   cfg = config.crypto;
 
+  decryptSecretScript = { secret, path, user, group }: ''
+    mkdir -p "$(dirname "${path}")"
+    touch "${path}"
+    chmod ${if group == "root" then "0400" else "0440"} "${path}"
+    chown "${user}"."${group}" "${path}"
+    ${if cfg.dummy then ''
+      echo "copying dummy secret ${secret.dummyContents} to ${path}"
+      cat "${secret.dummyContents}" > "${path}"
+    '' else ''
+      echo "decrypting ${path}"
+      ${cfg.decrypter} "${encryptSecret secret}" > "${path}"
+    ''}
+  '';
+
   decryptSecretsScript = svcName: writeScript "decrypt-secrets-${svcName}" ''
     #!${bash}/bin/bash
-    ${concatMapStrings ({svc,secretName,secret}: ''
-      mkdir -p "$(dirname "${svc.path}")"
-      touch "${svc.path}"
-      chmod ${if svc.group == "root" then "0400" else "0440"} "${svc.path}"
-      chown "${svc.user}"."${svc.group}" "${svc.path}"
-      ${if cfg.dummy then ''
-        echo "copying dummy secret ${secret.dummyContents} to ${svc.path}"
-        cat "${secret.dummyContents}" > "${svc.path}"
-      '' else if hasPrefix storeDir secret.plaintextPath then ''
-        echo "copying plaintext ${secret.plaintextPath} to ${svc.path}"
-        cat "${secret.plaintextPath}" > "${svc.path}"
-      '' else ''
-        echo "decrypting ${svc.path}"
-        ${cfg.decrypter} "${encryptSecret secret}" > "${svc.path}"
-      ''}
-    '') (secretsForService svcName)}
+    ${concatMapStrings ({svc,secretName,secret}:
+      decryptSecretScript {
+        inherit secret;
+        inherit (svc) path user group;
+      }
+    ) (secretsForService svcName)}
   '';
 
   encryptSecret = secret: toFile "sec" (readFile (stdenv.mkDerivation {
@@ -127,6 +131,51 @@ let
     };
   };
 
+  mkDecryptWrapper = secretNames: writeScript "decrypt-wrapper" ''
+    #!${bash}/bin/bash
+    set -eu
+
+    PATH="${utillinux}/bin:$PATH"
+
+    if ! [ "$(id -u)" == "0" ]; then
+      echo >&2 "You must be root"
+      exit 1
+    fi
+
+    newroot="$(mktemp -d)"
+    chmod 0700 "$newroot"
+
+    function cleanup() {
+      umount -l "$newroot"/{dev/pts,dev/shm,dev,nix/store,proc,sys,var,etc,root,run}
+      rm -rf "$newroot"
+    }
+
+    mkdir "$newroot/secrets"
+    for d in nix/store dev dev/pts dev/shm proc sys var etc root; do
+      mkdir -p "$newroot/$d"
+      mount --bind "/$d" "$newroot/$d"
+    done
+    mkdir -p "$newroot/run"
+    mount --rbind "/run" "$newroot/run"
+
+    trap cleanup SIGINT SIGTERM EXIT
+
+    chroot "$newroot" "${writeScript "wrapped" ''
+      #!${bash}/bin/bash
+      set -eu
+      ${concatMapStrings (s: let secret = cfg.secrets.${s}; in
+        decryptSecretScript {
+          inherit secret;
+          path = "/secrets/${s}";
+          user = "root";
+          group = "root";
+        }
+      ) secretNames}
+      exec "$@"
+    ''}" "$@"
+  '';
+
+
 in {
 
   options = {
@@ -155,6 +204,10 @@ in {
       secrets = mkOption {
         type = with types; attrsOf (submodule secretOpts);
         default = {};
+      };
+      mkDecryptWrapper = mkOption {
+        type = types.unspecified;
+        default = mkDecryptWrapper;
       };
     };
 

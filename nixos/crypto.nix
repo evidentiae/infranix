@@ -18,7 +18,7 @@ let
       echo "copying dummy secret ${secret.dummyContents} to ${path}"
       cat "${secret.dummyContents}" > "${path}"
     '' else ''
-      ${cfg.decrypter} "${encryptSecret secret}" > "${path}"
+      ${cfg.decrypter} "${secret.encryptedPath}" > "${path}"
     ''}
   '';
 
@@ -31,15 +31,6 @@ let
       }
     ) (secretsForService svcName)}
   '';
-
-  encryptSecret = secret: toFile "sec" (readFile (stdenv.mkDerivation {
-    name = "encryptedsecret";
-    phases = [ "buildPhase" ];
-    preferLocalBuild = true;
-    buildPhase = ''
-      ${cfg.encrypter} "${secret.plaintextPath}" > "$out"
-    '';
-  }));
 
   secretSvcOpts = secretName: secret: { name, config, ... }: {
     options = {
@@ -69,8 +60,8 @@ let
         type = with types; attrsOf (submodule (secretSvcOpts name config));
         default = {};
       };
-      plaintextPath = mkOption {
-        type = types.str;
+      encryptedPath = mkOption {
+        type = types.path;
       };
       dummyContents = mkOption {
         type = types.package;
@@ -193,14 +184,6 @@ in {
           Executable that can decrypt a secret. The first argument will be
           the encrypted file. The decrypted plaintext should be printed on
           stdout.
-        '';
-      };
-      encrypter = mkOption {
-        type = types.path;
-        description = ''
-          Executable that can encrypt a secret. The first argument will be
-          the plaintext file. The encrypted ciphertext should be printed on
-          stdout. The encrypter will run during the evalutation phase.
         '';
       };
       secrets = mkOption {

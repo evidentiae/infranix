@@ -18,7 +18,6 @@ let
       echo "copying dummy secret ${secret.dummyContents} to ${path}"
       cat "${secret.dummyContents}" > "${path}"
     '' else ''
-      echo "decrypting ${path}"
       ${cfg.decrypter} "${encryptSecret secret}" > "${path}"
     ''}
   '';
@@ -142,25 +141,28 @@ let
       exit 1
     fi
 
-    newroot="$(mktemp -d)"
-    chmod 0700 "$newroot"
+    root="$(mktemp -d)"
 
     function cleanup() {
-      umount -l "$newroot"/{dev/pts,dev/shm,dev,nix/store,proc,sys,var,etc,root,run}
-      rm -rf "$newroot"
+      umount --recursive "$root"
+      rmdir "$root"
     }
-
-    mkdir "$newroot/secrets"
-    for d in nix/store dev dev/pts dev/shm proc sys var etc root; do
-      mkdir -p "$newroot/$d"
-      mount --bind "/$d" "$newroot/$d"
-    done
-    mkdir -p "$newroot/run"
-    mount --rbind "/run" "$newroot/run"
 
     trap cleanup SIGINT SIGTERM EXIT
 
-    chroot "$newroot" "${writeScript "wrapped" ''
+    mount -t tmpfs -o mode=700 tmpfs "$root"
+    mkdir "$root"/{proc,tmp,secrets}
+    mount -t proc proc "$root/proc"
+    for d in nix/store var etc root; do
+      mkdir -p "$root/$d"
+      mount  --make-rslave --bind "/$d" "$root/$d"
+    done
+    for d in run sys dev; do
+      mkdir -p "$root/$d"
+      mount --make-rslave --rbind "/$d" "$root/$d"
+    done
+
+    chroot "$root" "${writeScript "wrapped" ''
       #!${bash}/bin/bash
       set -eu
       ${concatMapStrings (s: let secret = cfg.secrets.${s}; in

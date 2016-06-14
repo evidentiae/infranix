@@ -64,7 +64,7 @@ let
         type = types.path;
       };
       dummyContents = mkOption {
-        type = types.package;
+        type = types.path;
       };
     };
   };

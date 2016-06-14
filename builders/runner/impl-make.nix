@@ -43,7 +43,7 @@ in {
         exit 1
       fi
       shift
-      exec ${pkgs.gnumake}/bin/make cmdargs="$*" -Oline -j -f ${makefile} "$cmd"
+      exec ${pkgs.gnumake}/bin/make cmdargs="$*" -j -f ${makefile} "$cmd"
     ''
   );
 }

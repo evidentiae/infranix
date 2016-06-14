@@ -19,11 +19,17 @@ let
         (imap (j: _: "${cmd}${toString i}${toString j}") substeps)
       }
 
-      ${concatImapStrings (j: script: ''
-        .PHONY: ${cmd}${toString i}${toString j}
-        ${cmd}${toString i}${toString j}: ${cmd}${toString (i - 1)}
-        ''\t${script} $(cmdargs)
-      '') substeps}
+      ${concatImapStrings (j: script:
+        let
+          stepStr = optional (length steps > 1) "${toString i}/${toString (length steps)}";
+          subStepStr = optional (length substeps > 1) "${toString j}/${toString (length substeps)}";
+        in ''
+          .PHONY: ${cmd}${toString i}${toString j}
+          ${cmd}${toString i}${toString j}: ${cmd}${toString (i - 1)}
+          ''\t@echo >&2 "> ${cmd} ${concatStringsSep "." (stepStr ++ subStepStr)}"
+          ''\t@${script} $(cmdargs)
+        ''
+      ) substeps}
     '') steps}
   '') cfg.commands));
 
@@ -37,7 +43,7 @@ in {
         exit 1
       fi
       shift
-      exec ${pkgs.gnumake}/bin/make cmdargs="$*" -j -f ${makefile} "$cmd"
+      exec ${pkgs.gnumake}/bin/make cmdargs="$*" -Oline -j -f ${makefile} "$cmd"
     ''
   );
 }

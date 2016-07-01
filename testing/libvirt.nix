@@ -275,6 +275,7 @@ in {
         build="$(pwd)/build"
         uid="$(id -u)"
         gid="$(id -g)"
+        pwd="$(pwd)"
 
         # Setup directories and libvirt XML files
         mkdir -p build/{log,libvirt} build/hosts/{${instList}}

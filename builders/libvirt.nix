@@ -19,6 +19,7 @@ let
   ifQemu = optionalString (cfg.backend == "qemu");
 
   libvirtDevices = [
+    (ifLxc "<emulator>${pkgs.libvirt}/libexec/libvirt_lxc</emulator>")
     (ifQemu "<memballoon model='virtio'/>")
     (if cfg.consoleFile == null
       then "<serial type='pty'><target port='0'/></serial>"

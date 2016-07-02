@@ -98,8 +98,8 @@ let
         </capabilities>
       </features>
       <idmap>
-        <uid start='0' target='${cfg.lxc.mappedUid}' count='1000'/>
-        <gid start='0' target='${cfg.lxc.mappedGid}' count='1000'/>
+        <uid start='0' target='${cfg.lxc.mappedUid}' count='100000'/>
+        <gid start='0' target='${cfg.lxc.mappedGid}' count='100000'/>
       </idmap>
       <clock offset='utc'/>
       <on_poweroff>destroy</on_poweroff>

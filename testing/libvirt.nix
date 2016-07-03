@@ -48,16 +48,9 @@ let
           network = "net-@testid@";
         };
         consoleFile = "@build@/log/${name}-console.log";
-        extraDevices = ''
-          <serial type='file'>
-            <source path='@build@/log/${name}-journal.log'/>
-            <target port='1'/>
-          </serial>
-        '';
         fileShares.out = {
           guestPath = "/out";
-          hostPath = if name == cfg.test-driver.hostName
-                     then "/@build@" else "/@build@/hosts/${name}";
+          hostPath = "/@build@";
           readOnly = false;
         };
       };
@@ -68,8 +61,17 @@ let
         services.journald.extraConfig = ''
           Storage=volatile
           ForwardToConsole=yes
-          TTYPath=/dev/ttyS1
+          TTYPath=/dev/journaltty
+          RateLimitBurst=0
         '';
+        systemd.services.journaltty = {
+          wantedBy = [ "systemd-journald.service" ];
+          before = [ "systemd-journald.service" ];
+          serviceConfig = {
+            WorkingDirectory = "/out";
+            ExecStart = "${pkgs.socat}/bin/socat -u PTY,link=/dev/journaltty CREATE:log/${name}-journal.log";
+          };
+        };
         networking = {
           hostName = name;
           firewall.enable = false;
@@ -279,7 +281,7 @@ in {
 
         # Setup directories and libvirt XML files
         mkdir -p build/{log,libvirt} build/hosts/{${instList}}
-        touch build/log/std{out,err} build/log/{${instList}}-{console,journal}.log
+        touch build/log/std{out,err} build/log/{${instList}}-console.log
         cp -t build/libvirt "$src"/*
         for f in build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
         ${optionalString (cfg.backend == "lxc") "mkdir root-{${instList}}"}

@@ -7,13 +7,13 @@ let
 
   cfg = config.libvirt.test;
 
-  inherit (import ../lib.nix) hexByteToInt mkMAC;
+  inherit (import ../../lib.nix) hexByteToInt mkMAC;
 
   ips = mapAttrs (_: i: i.ip) cfg.instances;
 
   instanceOpts = { name, config, lib, ... }: {
     imports = [
-      ../builders/libvirt.nix
+      ../libvirt.nix
       cfg.defaultInstanceConfig
     ];
 

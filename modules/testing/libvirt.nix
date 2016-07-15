@@ -99,8 +99,13 @@ let
 
   virshCmds = concatStringsSep ";" (flatten [
     "net-create $build/libvirt/net-test.xml"
-    (map (name: "create $build/libvirt/dom-${name}.xml --autodestroy") instNames)
+    (map (name:
+      "create $build/libvirt/dom-${name}.xml --autodestroy"
+    ) instNames)
     "event --timeout ${toString cfg.timeout} --domain dom-$testid --event lifecycle"
+    (map (name:
+      "shutdown dom-$testid-${name}"
+     ) (filter (n: n != cfg.test-driver.hostName) instNames))
     "net-destroy net-$testid"
   ]);
 

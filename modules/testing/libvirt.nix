@@ -67,6 +67,7 @@ let
         systemd.services.journaltty = {
           wantedBy = [ "systemd-journald.service" ];
           before = [ "systemd-journald.service" ];
+          unitConfig.DefaultDependencies = false;
           serviceConfig = {
             WorkingDirectory = "/out";
             ExecStart = "${pkgs.socat}/bin/socat -u PTY,link=/dev/journaltty CREATE:log/${name}-journal.log";

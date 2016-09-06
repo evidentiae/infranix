@@ -106,6 +106,7 @@ let
     purge-old-secrets = {
       wantedBy = [ "multi-user.target" ];
       script = ''
+        mkdir -p /run/secrets
         ${findutils}/bin/find /run/secrets -type f | ${gnugrep}/bin/grep -vf ${
           writeText "secret-paths" (
             concatStringsSep "\n" (concatMap (svcName:

@@ -53,6 +53,12 @@ let
           hostPath = "/@build@";
           readOnly = false;
         };
+        fileShares.run = mkIf (cfg.backend == "lxc") {
+          guestPath = "/run";
+          hostPath = "run-${name}";
+          readOnly = false;
+          neededForBoot = true;
+        };
       };
 
       nixos.modules = singleton {
@@ -290,7 +296,7 @@ in {
         touch build/log/std{out,err} build/log/{${instList}}-console.log
         cp -t build/libvirt "$src"/*
         for f in build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
-        ${optionalString (cfg.backend == "lxc") "mkdir root-{${instList}}"}
+        ${optionalString (cfg.backend == "lxc") "mkdir {root,run}-{${instList}}"}
 
         # Let libvirt access paths inside the build directory and write to out dirs
         chmod a+x .

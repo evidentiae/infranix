@@ -248,24 +248,7 @@ in {
 
       i18n.consoleFont = "";
 
-      systemd = mkIf (cfg.backend == "lxc") {
-        services.console-getty.enable = false;
-        services.systemd-udevd.enable = false;
-        sockets.systemd-journald-audit.enable = false;
-        sockets.systemd-udevd-control.enable = false;
-        sockets.systemd-udevd-kernel.enable = false;
-        automounts = [
-          { where = "/proc/sys/fs/binfmt_misc";
-            enable = false;
-          }
-        ];
-        mounts = [
-          { where = "/dev/hugepages";
-            enable = false; }
-          { where = "/sys/kernel/debug";
-            enable = false; }
-        ];
-      };
+      systemd.services.console-getty.enable = mkIf (cfg.backend == "lxc") false;
 
       fileSystems = mkIf (cfg.backend != "lxc") (mkMerge (
         singleton {

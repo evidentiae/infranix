@@ -128,6 +128,11 @@ in {
 
     libvirt.test = {
 
+      name = mkOption {
+        type = types.str;
+        default = "libvirt-test";
+      };
+
       timeout = mkOption {
         type = types.int;
         default = 600;
@@ -246,7 +251,7 @@ in {
     };
 
     libvirt.test.out = pkgs.stdenv.mkDerivation {
-      name = "libvirt-test";
+      inherit (cfg) name;
 
       requiredSystemFeatures = [ "libvirt" ];
 

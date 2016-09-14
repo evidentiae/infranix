@@ -39,7 +39,7 @@ let
         lxc = mkIf (cfg.backend == "lxc") {
           mappedUid = "@uid@";
           mappedGid = "@gid@";
-          rootPath = "root-${name}";
+          rootPath = "/@mnt@/root-${name}";
         };
         name = "dom-@testid@-${name}";
         uuid = null;
@@ -55,7 +55,7 @@ let
         };
         fileShares.run = mkIf (cfg.backend == "lxc") {
           guestPath = "/run";
-          hostPath = "run-${name}";
+          hostPath = "/@mnt@/run-${name}";
           readOnly = false;
           neededForBoot = true;
         };
@@ -103,15 +103,16 @@ let
     if any (n': stringLength n' > stringLength n) (attrNames cfg.tailFiles)
     then padName "${n} " else n;
 
-  virshCmds = concatStringsSep ";" (flatten [
+  virshCreateCmds = concatStringsSep ";" (flatten [
     "net-create $build/libvirt/net-test.xml"
+    (map (name: "create $build/libvirt/dom-${name}.xml") instNames)
+  ]);
+
+  virshDestroyCmds = concatStringsSep ";" (flatten [
     (map (name:
-      "create $build/libvirt/dom-${name}.xml --autodestroy"
-    ) instNames)
-    "event --timeout ${toString cfg.timeout} --domain dom-$testid --event lifecycle"
-    (map (name:
-      "shutdown dom-$testid-${name}"
-     ) (filter (n: n != cfg.test-driver.hostName) instNames))
+      "destroy dom-$testid-${name}"
+    ) (filter (n: n != cfg.test-driver.hostName) instNames))
+    "destroy dom-$testid"
     "net-destroy net-$testid"
   ]);
 
@@ -241,7 +242,11 @@ in {
             Type = "oneshot";
             ExecStart = "${pkgs.writeScriptBin "test-script" ''
               #!${bash}/bin/bash
-              "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr && touch success
+              if "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr; then
+                touch success
+              else
+                touch failed
+              fi
               sync -f .
               ${pkgs.systemd}/bin/systemctl poweroff --force
             ''}/bin/test-script";
@@ -282,45 +287,67 @@ in {
         function prettytail() {
           local header="$1"
           local file="$2"
-          tail --pid $virshpid -F "$file" | while read l; do
+          tail --pid $virshpid -f "$file" | while read l; do
             printf "%s%s\n" "$header" "$l"
           done
         }
 
         # Variables that are substituted within the libvirt XML files
-        testid="$(basename "$out")"
+        testid="$(${pkgs.utillinux}/bin/uuidgen -r)"
         testid="''${testid%%-*}"
         testid="''${testid:0:7}"
-        build="$(pwd)/build"
         uid="$(id -u)"
         gid="$(id -g)"
         pwd="$(pwd)"
+        starttime="$(date +%s)"
+        retrysleep=10
 
-        # Setup directories and libvirt XML files
-        mkdir -p build/{log,libvirt} build/hosts/{${instList}}
-        touch build/log/std{out,err} build/log/{${instList}}-console.log
-        cp -t build/libvirt "$src"/*
-        for f in build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
-        ${optionalString (cfg.backend == "lxc") "mkdir {root,run}-{${instList}}"}
+        function run_one_build() {
+          export build="$(readlink -m "$(mktemp -dp "$pwd")")"
+          export mnt="$(readlink -m "$(mktemp -dp "$pwd")")"
 
-        # Let libvirt access paths inside the build directory and write to out dirs
-        chmod a+x .
-        chmod a+w -R build
+          # Setup directories and libvirt XML files
+          mkdir -p $build/{log,libvirt} $build/hosts/{${instList}}
+          touch $build/log/std{out,err} $build/log/{${instList}}-console.log
+          cp -t $build/libvirt "$src"/*
+          for f in $build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
+          ${optionalString (cfg.backend == "lxc") ''mkdir $mnt/{root,run}-{${instList}} ''}
 
-        # Start the libvirt machines
-        ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-          "${virshCmds}" >/dev/null &
-        virshpid=$!
+          # Let libvirt access paths inside the build directory and write to out dirs
+          chmod a+x .
+          chmod a+w -R $build
 
-        ${concatStrings (flatten (mapAttrsToList (n: fs: map (f: ''
-          prettytail "${padName n}" "$build/${f}" &
-        '') fs) cfg.tailFiles))}
+          echo "[Starting libvirt machines]"
+          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+            "${virshCreateCmds}" >/dev/null
+          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+            "event dom-$testid lifecycle --timeout ${toString cfg.timeout}" >/dev/null &
+          export virshpid=$!
 
-        # Wait for the test script to finish and then run any extra steps
-        wait -n $virshpid || touch build/failed
+          ${concatStrings (flatten (mapAttrsToList (n: fs: map (f: ''
+            prettytail "${padName n}" "$build/${f}" &
+          '') fs) cfg.tailFiles))}
+
+          wait $virshpid || true
+        }
+
+        while true; do
+          run_one_build || true
+          echo "[Destroying libvirt machines]"
+          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+            "${virshDestroyCmds}" &>/dev/null || true
+          if [[ -a $build/success || -a $build/failed ]]; then
+            break
+          elif (($(date +%s) > ($starttime + ${toString cfg.timeout}))); then
+            echo "[Build timeout passed, will not retry]"
+            break
+          fi
+          echo "[Retrying build in $retrysleep seconds]"
+          sleep $retrysleep
+        done
 
         # Put build products in place
-        cp -rnT build $out
+        cp -rnT $build $out
         mkdir -p $out/nix-support
 
         (
@@ -331,7 +358,7 @@ in {
           done; done
         ) >> $out/nix-support/hydra-build-products
 
-        out=$out extra-build-steps || touch build/failed
+        out=$out extra-build-steps || touch $out/failed
 
         if [[ -a $out/failed || ! -a $out/success ]]; then
           rm -f $out/failed $out/success

@@ -340,7 +340,9 @@ in {
 
           log "Starting libvirt machines"
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-            "${virshDestroyCmds}" "${virshCreateCmds}" &>/dev/null
+            "${virshDestroyCmds}" &>/dev/null || true
+          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+            "${virshCreateCmds}" >/dev/null
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "event dom-$testid lifecycle --timeout ${toString cfg.timeouts.singleTryTimeout}" >/dev/null &
           export virshpid=$!

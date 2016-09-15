@@ -137,7 +137,7 @@ in {
       timeouts = {
         sleepBetweenRetries = mkOption {
           type = types.int;
-          default = 10;
+          default = 15;
         };
         singleTryTimeout = mkOption {
           type = types.int;
@@ -302,6 +302,10 @@ in {
           done
         }
 
+        function now() {
+          date +%s
+        }
+
         # Variables that are substituted within the libvirt XML files
         testid="$(${pkgs.utillinux}/bin/uuidgen -r)"
         testid="''${testid%%-*}"
@@ -309,7 +313,15 @@ in {
         uid="$(id -u)"
         gid="$(id -g)"
         pwd="$(pwd)"
-        starttime="$(date +%s)"
+        starttime="$(now)"
+
+        function log() {
+          printf "%05d %s\n" $(($(now) - $starttime)) "$1"
+        }
+
+        function err() {
+          log "error: $1"
+        }
 
         function run_one_build() {
           export build="$(readlink -m "$(mktemp -dp "$pwd")")"
@@ -326,7 +338,7 @@ in {
           chmod a+x .
           chmod a+w -R $build
 
-          echo "[Starting libvirt machines]"
+          log "Starting libvirt machines"
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshCreateCmds}" >/dev/null
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
@@ -342,18 +354,18 @@ in {
 
         while true; do
           run_one_build || true
-          echo "[Destroying libvirt machines]"
+          log "Destroying libvirt machines"
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshDestroyCmds}" &>/dev/null || true
           if [[ -a $build/success || -a $build/failed ]]; then
             break
           fi
-          echo "[Build result unknown]"
+          err "Build result unknown"
           if (($(date +%s) > ($starttime + ${toString cfg.timeouts.totalTimeout}))); then
-            echo "[Total build timeout passed, will not retry]"
+            err "Total build timeout passed, will not retry"
             break
           fi
-          echo "[Retrying build in ${toString cfg.timeouts.sleepBetweenRetries} seconds]"
+          log "Retrying build in ${toString cfg.timeouts.sleepBetweenRetries} seconds"
           sleep ${toString cfg.timeouts.sleepBetweenRetries}
         done
 

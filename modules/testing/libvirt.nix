@@ -134,9 +134,19 @@ in {
         default = "libvirt-test";
       };
 
-      timeout = mkOption {
-        type = types.int;
-        default = 600;
+      timeouts = {
+        sleepBetweenRetries = mkOption {
+          type = types.int;
+          default = 10;
+        };
+        singleTryTimeout = mkOption {
+          type = types.int;
+          default = 10*60;
+        };
+        totalTimeout = mkOption {
+          type = types.int;
+          default = 35*60;
+        };
       };
 
       out = mkOption {
@@ -300,7 +310,6 @@ in {
         gid="$(id -g)"
         pwd="$(pwd)"
         starttime="$(date +%s)"
-        retrysleep=10
 
         function run_one_build() {
           export build="$(readlink -m "$(mktemp -dp "$pwd")")"
@@ -321,7 +330,7 @@ in {
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshCreateCmds}" >/dev/null
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-            "event dom-$testid lifecycle --timeout ${toString cfg.timeout}" >/dev/null &
+            "event dom-$testid lifecycle --timeout ${toString cfg.timeouts.singleTryTimeout}" >/dev/null &
           export virshpid=$!
 
           ${concatStrings (flatten (mapAttrsToList (n: fs: map (f: ''
@@ -338,12 +347,14 @@ in {
             "${virshDestroyCmds}" &>/dev/null || true
           if [[ -a $build/success || -a $build/failed ]]; then
             break
-          elif (($(date +%s) > ($starttime + ${toString cfg.timeout}))); then
-            echo "[Build timeout passed, will not retry]"
+          fi
+          echo "[Build result unknown]"
+          if (($(date +%s) > ($starttime + ${toString cfg.timeouts.totalTimeout}))); then
+            echo "[Total build timeout passed, will not retry]"
             break
           fi
-          echo "[Retrying build in $retrysleep seconds]"
-          sleep $retrysleep
+          echo "[Retrying build in ${toString cfg.timeouts.sleepBetweenRetries} seconds]"
+          sleep ${toString cfg.timeouts.sleepBetweenRetries}
         done
 
         # Put build products in place

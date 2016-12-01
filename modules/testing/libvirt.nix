@@ -9,8 +9,6 @@ let
 
   inherit (import ../../lib.nix) hexByteToInt mkMAC;
 
-  ips = mapAttrs (_: i: i.ip) cfg.instances;
-
   instanceOpts = { name, config, lib, ... }: {
     imports = [
       ../libvirt.nix
@@ -23,6 +21,11 @@ let
         default = let f = n: toString (hexByteToInt (
           substring n 2 (mkMAC name)
         )); in "10.0.${f 0}.${f 3}";
+      };
+
+      mac = mkOption {
+        type = types.str;
+        default = mkMAC name;
       };
 
       extraHostNames = mkOption {
@@ -44,7 +47,7 @@ let
         name = "dom-@testid@-${name}";
         uuid = null;
         netdevs.eth0 = {
-          mac = null;
+          mac = config.mac;
           network = "net-@testid@";
         };
         consoleFile = "@build@/log/${name}-console.log";
@@ -82,15 +85,6 @@ let
         networking = {
           hostName = name;
           firewall.enable = false;
-          useDHCP = false;
-          usePredictableInterfaceNames = false;
-          localCommands = ''
-            ip addr add ${config.ip}/16 dev eth0
-            ip link set dev eth0 up
-          '';
-          extraHosts = concatStringsSep "\n" (mapAttrsToList (name: i:
-            "${i.ip} ${concatStringsSep " " ([name] ++ (map (removeSuffix ".") i.extraHostNames))}"
-          ) cfg.instances);
         };
       };
     };
@@ -120,6 +114,27 @@ let
   libvirtNetwork = writeText "network.xml" ''
     <network>
       <name>net-@testid@</name>
+      <bridge name="virbr-@testid@" stp="off"/>
+      <domain name="${cfg.domain}" localOnly="yes"/>
+      <ip address="10.0.0.1" netmask="255.255.0.0">
+        <dhcp>
+          <range start="10.0.0.2" end="10.0.255.254" />
+          ${concatStrings (mapAttrsToList (name: i: ''
+            <host mac="${i.mac}" name="${name}" ip="${i.ip}"/>
+          '') cfg.instances)}
+        </dhcp>
+      </ip>
+      <dns>
+        ${concatStrings (mapAttrsToList (name: i:
+          optionalString (i.extraHostNames != []) ''
+            <host ip="${i.ip}">
+              ${concatMapStrings (n: ''
+                <hostname>${removeSuffix "." n}</hostname>
+              '') i.extraHostNames}
+            </host>
+          ''
+        ) cfg.instances)}
+      </dns>
     </network>
   '';
 
@@ -132,6 +147,11 @@ in {
       name = mkOption {
         type = types.str;
         default = "libvirt-test";
+      };
+
+      domain = mkOption {
+        type = types.str;
+        default = "example.com";
       };
 
       timeouts = {

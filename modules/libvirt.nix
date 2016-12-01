@@ -32,7 +32,6 @@ let
     )
     (ifLxc "<console type='pty'><target port='0'/></console>")
     (concatStrings (mapAttrsToList (n: dev: ''
-
       <interface type='network'>
         ${ifQemu "<model type='virtio'/>"}
         <source network='${dev.network}'/>

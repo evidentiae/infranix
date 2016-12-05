@@ -9,6 +9,12 @@ let
 
   inherit (import ../../lib.nix) hexByteToInt mkMAC;
 
+  genByte = s: n: toString (hexByteToInt (
+    substring n 2 (mkMAC s)
+  ));
+
+  netPrefix = "10.${genByte cfg.name 0}.";
+
   instanceOpts = { name, config, lib, ... }: {
     imports = [
       ../libvirt.nix
@@ -18,9 +24,7 @@ let
     options = {
       ip = mkOption {
         type = types.str;
-        default = let f = n: toString (hexByteToInt (
-          substring n 2 (mkMAC name)
-        )); in "10.0.${f 0}.${f 3}";
+        default = "${netPrefix}${genByte name 0}.${genByte name 3}";
       };
 
       mac = mkOption {
@@ -116,9 +120,9 @@ let
       <name>net-@testid@</name>
       <bridge name="virbr-@testid@" stp="off"/>
       <domain name="${cfg.domain}" localOnly="yes"/>
-      <ip address="10.0.0.1" netmask="255.255.0.0">
+      <ip address="${netPrefix}0.1" netmask="255.255.0.0">
         <dhcp>
-          <range start="10.0.0.2" end="10.0.255.254" />
+          <range start="${netPrefix}0.2" end="${netPrefix}255.254" />
           ${concatStrings (mapAttrsToList (name: i: ''
             <host mac="${i.mac}" name="${name}" ip="${i.ip}"/>
           '') cfg.instances)}

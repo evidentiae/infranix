@@ -1,1 +1,1 @@
-# nix-modules
+# infranix

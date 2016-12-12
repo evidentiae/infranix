@@ -117,7 +117,7 @@ let
     <network>
       <name>net-@testid@</name>
       <bridge name="virbr-@testid@" stp="off"/>
-      <domain name="${cfg.domain}" localOnly="yes"/>
+      <domain name="${cfg.network.domain}" localOnly="yes"/>
       <ip address="10.@subnet@.0.1" netmask="255.255.0.0">
         <dhcp>
           <range start="10.@subnet@.0.2" end="10.@subnet@.255.254" />
@@ -151,7 +151,7 @@ in {
         default = "libvirt-test";
       };
 
-      domain = mkOption {
+      network.domain = mkOption {
         type = types.str;
         default = "example.com";
       };

@@ -5,9 +5,9 @@ with builtins;
 
 let
 
-  cfg = config.libvirt;
+  cfg = config.libvirt.domain;
 
-  inherit (import ../lib.nix) mkUUID mkMAC;
+  inherit (import ../../lib.nix) mkUUID mkMAC;
 
   sys = config.nixos.out.system;
 
@@ -115,11 +115,11 @@ let
 
 in {
   imports = [
-    ./nixos.nix
+    ../nixos.nix
   ];
 
   options = {
-    libvirt = {
+    libvirt.domain = {
       backend = mkOption {
         type = types.enum [ "qemu" "lxc" ];
         default = "qemu";
@@ -219,15 +219,15 @@ in {
 
   config = {
 
-    libvirt.xmlFile = pkgs.writeText "libvirt.xml" config.libvirt.xml;
+    libvirt.domain.xmlFile = pkgs.writeText "libvirt.xml" cfg.xml;
 
-    libvirt.fileShares.nixstore = {
+    libvirt.domain.fileShares.nixstore = {
       hostPath = "/nix/store";
       guestPath = "/nix/store";
       neededForBoot = true;
     };
 
-    libvirt.fileShares.root = mkIf (cfg.backend == "lxc") {
+    libvirt.domain.fileShares.root = mkIf (cfg.backend == "lxc") {
       hostPath = cfg.lxc.rootPath;
       guestPath = "/";
       mount = false;

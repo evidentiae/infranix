@@ -15,7 +15,7 @@ let
 
   instanceOpts = { name, config, lib, ... }: {
     imports = [
-      ../libvirt.nix
+      ../libvirt/domain.nix
       cfg.defaultInstanceConfig
     ];
 
@@ -39,7 +39,7 @@ let
     config = {
       _module.args = { inherit pkgs; };
 
-      libvirt = {
+      libvirt.domain = {
         backend = cfg.backend;
         lxc = mkIf (cfg.backend == "lxc") {
           mappedUid = "@uid@";
@@ -256,7 +256,7 @@ in {
   config = {
 
     libvirt.test.instances.${cfg.test-driver.hostName} = {
-      libvirt.name = mkForce "dom-@testid@";
+      libvirt.domain.name = mkForce "dom-@testid@";
       nixos.modules = cfg.test-driver.extraModules ++ [{
         systemd.services.test-script = {
           wantedBy = [ "multi-user.target" ];
@@ -298,7 +298,7 @@ in {
         } ''
           mkdir $out
           ${concatStrings (mapAttrsToList (n: i: ''
-            ln -sv "${i.libvirt.xmlFile}" "$out/dom-${n}.xml"
+            ln -sv "${i.libvirt.domain.xmlFile}" "$out/dom-${n}.xml"
           '') cfg.instances)}
           ln -s "${libvirtNetwork}" "$out/net-test.xml"
         '';

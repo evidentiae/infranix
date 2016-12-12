@@ -2,10 +2,16 @@
 
 with lib;
 with pkgs;
+with builtins;
 
 let
 
   cfg = config.libvirt.test;
+
+  backend =
+    if match "^lxc\+?[^:]+://.*$" cfg.connectionURI != null then "lxc"
+    else if match "^qemu\+?[^:]+://.*$" cfg.connectionURI != null then "qemu"
+    else throw "Cannot derive libvirt backend type from URI ${cfg.connectionURI}";
 
   inherit (import ../../lib.nix) hexByteToInt mkMAC;
 
@@ -40,8 +46,8 @@ let
       _module.args = { inherit pkgs; };
 
       libvirt.domain = {
-        backend = cfg.backend;
-        lxc = mkIf (cfg.backend == "lxc") {
+        inherit backend;
+        lxc = mkIf (backend == "lxc") {
           mappedUid = "@uid@";
           mappedGid = "@gid@";
           rootPath = "/@mnt@/root-${name}";
@@ -58,7 +64,7 @@ let
           hostPath = "/@build@";
           readOnly = false;
         };
-        fileShares.run = mkIf (cfg.backend == "lxc") {
+        fileShares.run = mkIf (backend == "lxc") {
           guestPath = "/run";
           hostPath = "/@mnt@/run-${name}";
           readOnly = false;
@@ -67,7 +73,7 @@ let
       };
 
       nixos.modules = singleton {
-        services.nscd.enable = cfg.backend != "lxc";
+        services.nscd.enable = backend != "lxc";
         users.extraUsers.root.password = "root";
         services.journald.extraConfig = ''
           Storage=volatile
@@ -186,7 +192,7 @@ in {
       connectionURI = mkOption {
         type = types.str;
         default =
-          if cfg.backend == "qemu" then "qemu:///system"
+          if backend == "qemu" then "qemu:///system"
           else "lxc:///";
       };
 
@@ -355,7 +361,7 @@ in {
           touch $build/log/std{out,err} $build/log/{${domList}}-console.log
           cp -t $build/libvirt "$src"/*
           for f in $build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
-          ${optionalString (cfg.backend == "lxc") ''mkdir $mnt/{root,run}-{${domList}} ''}
+          ${optionalString (backend == "lxc") ''mkdir $mnt/{root,run}-{${domList}} ''}
 
           # Let libvirt access paths inside the build directory and write to out dirs
           chmod a+x .

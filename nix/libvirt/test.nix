@@ -13,7 +13,7 @@ let
     substring n 2 (mkMAC s)
   ));
 
-  instanceOpts = { name, config, lib, ... }: {
+  domainOpts = { name, config, lib, ... }: {
     imports = [
       ./domain.nix
       cfg.defaultInstanceConfig
@@ -92,8 +92,8 @@ let
     };
   };
 
-  instNames = attrNames cfg.instances;
-  instList = concatMapStringsSep "," (n: ''"${n}"'') instNames;
+  domNames = attrNames cfg.domains;
+  domList = concatMapStringsSep "," (n: ''"${n}"'') domNames;
 
   padName = n:
     if any (n': stringLength n' > stringLength n) (attrNames cfg.tailFiles)
@@ -101,13 +101,13 @@ let
 
   virshCreateCmds = concatStringsSep ";" (flatten [
     "net-create $build/libvirt/net-test.xml"
-    (map (name: "create $build/libvirt/dom-${name}.xml") instNames)
+    (map (name: "create $build/libvirt/dom-${name}.xml") domNames)
   ]);
 
   virshDestroyCmds = concatStringsSep ";" (flatten [
     (map (name:
       "destroy dom-$testid-${name}"
-    ) (filter (n: n != cfg.test-driver.hostName) instNames))
+    ) (filter (n: n != cfg.test-driver.hostName) domNames))
     "destroy dom-$testid"
     "net-destroy net-$testid"
   ]);
@@ -121,21 +121,21 @@ let
       <ip address="10.@subnet@.0.1" netmask="255.255.0.0">
         <dhcp>
           <range start="10.@subnet@.0.2" end="10.@subnet@.255.254" />
-          ${concatStrings (mapAttrsToList (name: i: ''
-            <host mac="${i.mac}" name="${name}" ip="${i.ip}"/>
-          '') cfg.instances)}
+          ${concatStrings (mapAttrsToList (name: d: ''
+            <host mac="${d.mac}" name="${name}" ip="${d.ip}"/>
+          '') cfg.domains)}
         </dhcp>
       </ip>
       <dns>
-        ${concatStrings (mapAttrsToList (name: i:
-          optionalString (i.extraHostNames != []) ''
-            <host ip="${i.ip}">
+        ${concatStrings (mapAttrsToList (name: d:
+          optionalString (d.extraHostNames != []) ''
+            <host ip="${d.ip}">
               ${concatMapStrings (n: ''
                 <hostname>${removeSuffix "." n}</hostname>
-              '') i.extraHostNames}
+              '') d.extraHostNames}
             </host>
           ''
-        ) cfg.instances)}
+        ) cfg.domains)}
       </dns>
     </network>
   '';
@@ -195,9 +195,9 @@ in {
         default = {};
       };
 
-      instances = mkOption {
+      domains = mkOption {
         default = {};
-        type = with types; attrsOf (submodule instanceOpts);
+        type = with types; attrsOf (submodule domainOpts);
       };
 
       extraBuildSteps = mkOption {
@@ -214,8 +214,8 @@ in {
         default = {
           OUT = [ "log/stdout" ];
           ERR = [ "log/stderr" ];
-        } // genAttrs instNames (n: [ "log/${n}-console.log" ])
-          // genAttrs instNames (n: [ "log/${n}-journal.log" ]);
+        } // genAttrs domNames (n: [ "log/${n}-console.log" ])
+          // genAttrs domNames (n: [ "log/${n}-journal.log" ]);
       };
 
       test-driver = {
@@ -229,7 +229,7 @@ in {
           description = ''
             The main test script. This is run from a separate libvirt machine
             (the test driver machine) that is part of the same network as the
-            other libvirt machines (defined by the <code>instances</code>
+            other libvirt machines (defined by the <code>domains</code>
             option).
           '';
         };
@@ -255,7 +255,7 @@ in {
 
   config = {
 
-    libvirt.test.instances.${cfg.test-driver.hostName} = {
+    libvirt.test.domains.${cfg.test-driver.hostName} = {
       libvirt.domain.name = mkForce "dom-@testid@";
       nixos.modules = cfg.test-driver.extraModules ++ [{
         systemd.services.test-script = {
@@ -297,9 +297,9 @@ in {
           allowSubstitutes = false;
         } ''
           mkdir $out
-          ${concatStrings (mapAttrsToList (n: i: ''
-            ln -sv "${i.libvirt.domain.xmlFile}" "$out/dom-${n}.xml"
-          '') cfg.instances)}
+          ${concatStrings (mapAttrsToList (n: d: ''
+            ln -sv "${d.libvirt.domain.xmlFile}" "$out/dom-${n}.xml"
+          '') cfg.domains)}
           ln -s "${libvirtNetwork}" "$out/net-test.xml"
         '';
 
@@ -351,11 +351,11 @@ in {
           export mnt="$(readlink -m "$(mktemp -dp "$pwd")")"
 
           # Setup directories and libvirt XML files
-          mkdir -p $build/{log,libvirt} $build/hosts/{${instList}}
-          touch $build/log/std{out,err} $build/log/{${instList}}-console.log
+          mkdir -p $build/{log,libvirt} $build/hosts/{${domList}}
+          touch $build/log/std{out,err} $build/log/{${domList}}-console.log
           cp -t $build/libvirt "$src"/*
           for f in $build/libvirt/{dom,net}-*.xml; do substituteAllInPlace "$f"; done
-          ${optionalString (cfg.backend == "lxc") ''mkdir $mnt/{root,run}-{${instList}} ''}
+          ${optionalString (cfg.backend == "lxc") ''mkdir $mnt/{root,run}-{${domList}} ''}
 
           # Let libvirt access paths inside the build directory and write to out dirs
           chmod a+x .
@@ -401,7 +401,7 @@ in {
         (
           echo "file log $out/log/stdout"
           echo "file log $out/log/stderr"
-          for i in ${toString instNames}; do for l in console journal; do
+          for i in ${toString domNames}; do for l in console journal; do
             echo "file log $out/log/$i-$l.log"
           done; done
         ) >> $out/nix-support/hydra-build-products

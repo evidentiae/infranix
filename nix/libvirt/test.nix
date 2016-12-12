@@ -15,7 +15,7 @@ let
 
   instanceOpts = { name, config, lib, ... }: {
     imports = [
-      ../libvirt/domain.nix
+      ./domain.nix
       cfg.defaultInstanceConfig
     ];
 

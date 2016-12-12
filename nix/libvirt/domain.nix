@@ -11,10 +11,6 @@ let
 
   sys = config.nixos.out.system;
 
-  mkFsOptions = list:
-    if versionAtLeast lib.nixpkgsVersion "16.09" then list
-    else concatStringsSep "," list;
-
   ifLxc = optionalString (cfg.backend == "lxc");
   ifQemu = optionalString (cfg.backend == "qemu");
 
@@ -254,20 +250,20 @@ in {
           "/" = {
             fsType = "tmpfs";
             device = "tmpfs";
-            options =  mkFsOptions [ "mode=0755" ];
+            options =  [ "mode=0755" ];
           };
         } ++ mapAttrsToList (id: share: {
           "${share.guestPath}" = {
             fsType = "9p";
             device = id;
             inherit (share) neededForBoot;
-            options = mkFsOptions [
+            options = [
               "trans=virtio"
               "version=9p2000.L"
               (if share.readOnly then "ro" else "rw")
             ];
           };
-        }) (filterAttrs (_: s: s.mount) config.libvirt.fileShares)
+        }) (filterAttrs (_: s: s.mount) config.libvirt.domain.fileShares)
       ));
     };
 

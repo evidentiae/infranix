@@ -32,18 +32,17 @@ let
   stepOpts = {name, config, ... }: {
     options = {
       binary = mkOption {
-        type = types.path;
+        type = with types; nullOr path;
+        default = null;
       };
       dependencies = mkOption {
         type = with types; listOf str;
+        default = [];
       };
       interactive = mkOption {
         type = types.bool;
         default = false;
       };
-    };
-    config = {
-      dependencies = mkDefault [];
     };
   };
 
@@ -73,24 +72,28 @@ let
       ./bin/"$name" init - > nix-support/setup-hook
       rm -rf share libexec/"$name"-init
 
-      ${concatStrings (mapAttrsToList (subName: cmd: ''
-        cp -T "${cmd.binary}" "$out/libexec/$name-${subName}"
-      '') subCommands)}
+      ${concatStrings (mapAttrsToList (subName: cmd:
+        optionalString (cmd.binary != null) ''
+          cp -T "${cmd.binary}" "$out/libexec/$name-${subName}"
+        ''
+      ) subCommands)}
     '';
   };
 
   safeName = replaceStrings [":" " " "/"] ["_" "_" "_"];
 
-  makefile = name: steps: writeText "Makefile" (concatStrings (
-    mapAttrsToList (stepName: step: let target = safeName stepName; in ''
-      .PHONY${optionalString step.interactive " .NOTPARALLEL"}: ${target}
-      ${target}: ${toString (map safeName step.dependencies)}
-      ''\t@echo >&2 "> ${name}:${stepName}"
-      ''\t@${step.binary} $(cmdargs)
-    '') steps ++ singleton ''
-      all: ${toString (map safeName (attrNames steps))}
-    ''
-  ));
+  makefile = name: steps:
+    let steps' = filterAttrs (_: step: step.binary != null) steps;
+    in writeText "Makefile" (concatStrings (
+      mapAttrsToList (stepName: step: let target = safeName stepName; in ''
+        .PHONY${optionalString step.interactive " .NOTPARALLEL"}: ${target}
+        ${target}: ${toString (map safeName step.dependencies)}
+        ''\t@echo >&2 "> ${name}:${stepName}"
+        ''\t@${step.binary} $(cmdargs)
+      '') steps' ++ singleton ''
+        all: ${toString (map safeName (attrNames steps'))}
+      ''
+    ));
 
   mkSteps = name: bin: maxjobs: steps:
     (if bin then writeScriptBin else writeScript) (safeName name) ''
@@ -102,7 +105,8 @@ let
   subCmdOpts = parentName: { name, config, ... }: {
     options = {
       binary = mkOption {
-        type = types.path;
+        type = with types; nullOr path;
+        default = null;
       };
       steps = mkOption {
         type = with types; attrsOf (submodule stepOpts);

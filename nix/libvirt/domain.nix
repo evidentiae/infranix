@@ -229,7 +229,7 @@ in {
       mount = false;
     };
 
-    nixos.modules = singleton {
+    nixos.imports = singleton {
       boot = {
         kernelParams = [ "logo.nologo" ];
         initrd.kernelModules = [ "9p" "virtio_pci" "9pnet_virtio" ];

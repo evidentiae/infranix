@@ -6,7 +6,7 @@ with builtins;
 {
   options = {
     nixos = {
-      modules = mkOption {
+      imports = mkOption {
         type = with types; listOf unspecified;
         default = [];
         description = ''
@@ -46,7 +46,7 @@ with builtins;
       if config.nixos.pathOverride == null then
         import "${toString pkgs.path}/nixos" {
           configuration = {
-            imports = config.nixos.modules;
+            inherit (config.nixos) imports;
           };
         }
       else (
@@ -65,7 +65,7 @@ with builtins;
         in let inherit (overrides) __nixPath;
         in scopedImport overrides <nixpkgs/nixos> {
           configuration = {
-            imports = config.nixos.modules;
+            inherit (config.nixos) imports;
           };
         }
       );

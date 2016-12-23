@@ -72,7 +72,7 @@ let
         };
       };
 
-      nixos.modules = singleton {
+      nixos.imports = singleton {
         services.nscd.enable = backend != "lxc";
         users.extraUsers.root.password = "root";
         services.journald.extraConfig = ''
@@ -263,7 +263,7 @@ in {
 
     libvirt.test.domains.${cfg.test-driver.hostName} = {
       libvirt.domain.name = mkForce "dom-@testid@";
-      nixos.modules = cfg.test-driver.extraModules ++ [{
+      nixos.imports = cfg.test-driver.extraModules ++ [{
         systemd.services.test-script = {
           wantedBy = [ "multi-user.target" ];
           wants = [ "network.target" ];

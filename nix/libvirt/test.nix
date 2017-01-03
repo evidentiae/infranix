@@ -157,6 +157,11 @@ in {
         default = "libvirt-test";
       };
 
+      succeedOnFailure = mkOption {
+        type = types.bool;
+        default = true;
+      };
+
       network.domain = mkOption {
         type = types.str;
         default = "example.com";
@@ -319,7 +324,7 @@ in {
         ''
       );
 
-      succeedOnFailure = true;
+      inherit (cfg) succeedOnFailure;
 
       buildPhase = ''
         function prettytail() {

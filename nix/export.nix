@@ -13,21 +13,27 @@ let
 
   isPrefixOf = xs: ys: take (length xs) ys == xs;
 
-  includeAttr = path:
-    path != [] &&
-    any (inc: isPrefixOf inc path) cfg.includeConfig &&
-    !(any (exc: isPrefixOf exc path) cfg.excludeConfig) &&
-    last path != "_module";
+  excludePath = path:
+    path == [] ||
+    last path == "_module" ||
+    any (exc: isPrefixOf exc path) cfg.excludeConfig;
+
+  includePath = path:
+    any (inc: isPrefixOf inc path) cfg.includeConfig;
+
+  recursePath = path:
+    !(excludePath path) &&
+    (includePath path || any (inc: isPrefixOf path inc) cfg.includeConfig);
 
   filterAttrs = path: attrs:
-    let names = filter (n: includeAttr (path ++ [n])) (attrNames attrs); in
+    let nonExcludedSubPaths = filter (n: recursePath (path ++ [n])) (attrNames attrs); in
       listToAttrs (map (n: nameValuePair n (
         let
           v = attrs.${n};
         in
-          if !(isAttrs v) || isDerivation v then v
+          if includePath (path ++ [n]) && (!(isAttrs v) || isDerivation v) then v
           else filterAttrs (path ++ [n]) v
-      )) names);
+      )) nonExcludedSubPaths);
 
 in {
   options = {
@@ -73,8 +79,8 @@ in {
   config = {
 
     export.build.nixosConfig = { ... }: {
-      options = mapAttrs (_: _: mkOption {
-        type = types.attrs;
+      options = mapAttrsRecursiveCond (as: !(isDerivation as)) (_: _: mkOption {
+        type = types.unspecified;
       }) filteredAttrs;
 
       config = filteredAttrs;

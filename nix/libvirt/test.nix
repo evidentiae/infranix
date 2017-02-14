@@ -167,6 +167,16 @@ in {
         default = "example.com";
       };
 
+      retryCount = mkOption {
+        type = types.int;
+        default = 3;
+      };
+
+      retryOnTimeout = mkOption {
+        type = types.bool;
+        default = true;
+      };
+
       timeouts = {
         sleepBetweenRetries = mkOption {
           type = types.int;
@@ -285,13 +295,10 @@ in {
             Type = "oneshot";
             ExecStart = "${pkgs.writeScriptBin "test-script" ''
               #!${bash}/bin/bash
-              if "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr; then
-                touch success
-              else
-                touch failed
-              fi
+              "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr
+              echo "$?" > script.status
               sync -f .
-              ${pkgs.systemd}/bin/systemctl poweroff --force
+              ${pkgs.systemd}/bin/systemctl poweroff --force --force
             ''}/bin/test-script";
           };
         };
@@ -339,16 +346,6 @@ in {
           date +%s
         }
 
-        # Variables that are substituted within the libvirt XML files
-        testid="$(${pkgs.utillinux}/bin/uuidgen -r)"
-        testid="''${testid%%-*}"
-        testid="''${testid:0:7}"
-        uid="$(id -u)"
-        gid="$(id -g)"
-        pwd="$(pwd)"
-        starttime="$(now)"
-        subnet="$(($RANDOM % 255))"
-
         function log() {
           printf "%05d %s\n" $(($(now) - $starttime)) "$1"
         }
@@ -358,6 +355,10 @@ in {
         }
 
         function run_one_build() {
+          testid="$(${pkgs.utillinux}/bin/uuidgen -r)"
+          testid="''${testid%%-*}"
+          export testid="''${testid:0:7}"
+          export subnet="$(($RANDOM % 255))"
           export build="$(readlink -m "$(mktemp -dp "$pwd")")"
           export mnt="$(readlink -m "$(mktemp -dp "$pwd")")"
 
@@ -376,7 +377,7 @@ in {
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshDestroyCmds}" &>/dev/null || true
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
-            "${virshCreateCmds}" >/dev/null
+            "${virshCreateCmds}" >/dev/null || return
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "event dom-$testid lifecycle --timeout ${toString cfg.timeouts.singleTryTimeout}" >/dev/null &
           export virshpid=$!
@@ -388,19 +389,59 @@ in {
           wait $virshpid || true
         }
 
+        uid="$(id -u)"
+        gid="$(id -g)"
+        pwd="$(pwd)"
+        starttime="$(now)"
+        retries_left="${toString cfg.retryCount}"
+
         while true; do
+          try_starttime="$(now)"
           run_one_build || true
           log "Destroying libvirt machines"
           ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshDestroyCmds}" &>/dev/null || true
-          if [[ -a $build/success || -a $build/failed ]]; then
+
+          try_time="$(($(now) - $try_starttime))"
+          total_time="$(($(now) - $starttime))"
+          retries_left="$(($retries_left - 1))"
+
+          if (($total_time > ${toString cfg.timeouts.totalTimeout})); then
+            err "Total build timeout passed"
+            touch "$build/failed"
             break
+          elif (($try_time > ${toString cfg.timeouts.singleTryTimeout})); then
+            if ((retries_left <= 0)) && [ -z "${toString cfg.retryOnTimeout}"]; then
+              err "Timeout, not retrying"
+              touch "$build/failed"
+              break
+            fi
+          elif ! [ -a "$build/script.status" ]; then
+            if ((retries_left <= 0)); then
+              err "Unknown result, no retries left"
+              touch "$build/failed"
+              break
+            fi
+          else
+            case "$(cat "$build/script.status")" in
+              0)
+                break
+                ;;
+              2)
+                if ((retries_left <= 0)); then
+                  err "Retries exhausted"
+                  touch "$build/failed"
+                  break
+                fi
+                ;;
+              *)
+                err "Test script failed"
+                touch "$build/failed"
+                break
+                ;;
+            esac
           fi
-          err "Build result unknown"
-          if (($(date +%s) > ($starttime + ${toString cfg.timeouts.totalTimeout}))); then
-            err "Total build timeout passed, will not retry"
-            break
-          fi
+
           log "Retrying build in ${toString cfg.timeouts.sleepBetweenRetries} seconds"
           sleep ${toString cfg.timeouts.sleepBetweenRetries}
         done
@@ -419,8 +460,9 @@ in {
 
         out=$out extra-build-steps || touch $out/failed
 
-        if [[ -a $out/failed || ! -a $out/success ]]; then
-          rm -f $out/failed $out/success
+        rm -f $out/script-status
+        if [[ -a $out/failed ]]; then
+          rm $out/failed
           exit 1
         fi
       '';

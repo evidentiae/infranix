@@ -8,6 +8,35 @@ let
 
   cfg = config.libvirt.test;
 
+  STATUS_PASS = "0";
+  STATUS_FAIL = "1";
+  STATUS_RETRY = "2";
+
+  mkScript = prefix: set:
+    let
+      set' = mapAttrs (n: v: v // {
+        text = ''
+          echo '[${prefix}:${n}]'
+          ${v.text}
+        '';
+      }) (
+        mapAttrs (n: v: if isString v then noDepEntry v else v) set
+      );
+    in textClosureMap id set' (attrNames set');
+
+  scriptType = with types; attrsOf (either lines (submodule (_: {
+    options = {
+      text = mkOption {
+        type = lines;
+        default = "";
+      };
+      deps = mkOption {
+        type = listOf str;
+        default = [];
+      };
+    };
+  })));
+
   backend =
     if match "^lxc\+?[^:]+://.*$" cfg.connectionURI != null then "lxc"
     else if match "^qemu\+?[^:]+://.*$" cfg.connectionURI != null then "qemu"
@@ -87,7 +116,7 @@ let
           unitConfig.DefaultDependencies = false;
           serviceConfig = {
             WorkingDirectory = "/out";
-            ExecStart = "${pkgs.socat}/bin/socat -u PTY,link=/dev/journaltty CREATE:log/${name}-journal.log";
+            ExecStart = "${socat}/bin/socat -u PTY,link=/dev/journaltty CREATE:log/${name}-journal.log";
           };
         };
         networking = {
@@ -221,15 +250,6 @@ in {
         type = with types; attrsOf (submodule domainOpts);
       };
 
-      extraBuildSteps = mkOption {
-        type = types.lines;
-        default = "";
-        description = ''
-          Extra build steps that is run as the last part of the build phase
-          for the <code>output</code> build.
-        '';
-      };
-
       tailFiles = mkOption {
         type = with types; attrsOf (listOf str);
         default = {
@@ -245,19 +265,33 @@ in {
           default = "driver";
         };
 
+        scriptPath = mkOption {
+          type = with types; listOf path;
+          default = [];
+        };
+
         script = mkOption {
-          type = types.path;
+          type = scriptType;
+          default = {};
           description = ''
             The main test script. This is run from a separate libvirt machine
             (the test driver machine) that is part of the same network as the
             other libvirt machines (defined by the <code>domains</code>
-            option).
+            option). This option is configured like the activationScripts
+            option in NixOS.
           '';
         };
 
-        scriptPath = mkOption {
-          type = with types; listOf path;
-          default = [];
+        validationScript = mkOption {
+          type = scriptType;
+          default = {};
+          description = ''
+            A separate script executed after the main test script (also within
+            the driver VM). The validation script will run even if the main
+            test script fails, and can be used for post-processing.
+            This option is configured like the activationScripts
+            option in NixOS.
+          '';
         };
 
         extraModules = mkOption {
@@ -293,19 +327,42 @@ in {
           serviceConfig = {
             WorkingDirectory = "/out";
             Type = "oneshot";
-            ExecStart = "${pkgs.writeScriptBin "test-script" ''
-              #!${bash}/bin/bash
-              "${cfg.test-driver.script}" >> log/stdout 2>> log/stderr
-              echo "$?" > script.status
+            ExecStart = "${writeScriptBin "test-script" ''
+              #!${stdenv.shell}
+
+              trap '${systemd}/bin/systemctl poweroff --force --force' EXIT
+
+              export out="$(cat out)"
+              rm out
+
+              (
+                set -e
+                set -o pipefail
+                ${mkScript "test" cfg.test-driver.script}
+              ) >> log/stdout 2>> log/stderr
+              main_status="$?"
+
               sync -f .
-              ${pkgs.systemd}/bin/systemctl poweroff --force --force
+
+              (
+                set -e
+                set -o pipefail
+                ${mkScript "validate" cfg.test-driver.validationScript}
+              ) >> log/stdout 2>> log/stderr
+              validation_status="$?"
+
+              if [[ "$validation_status" == "${STATUS_PASS}" ]]; then
+                echo "$main_status" > script.status
+              else
+                echo "$validation_status" > script.status
+              fi
             ''}/bin/test-script";
           };
         };
       }];
     };
 
-    libvirt.test.out = pkgs.stdenv.mkDerivation {
+    libvirt.test.out = stdenv.mkDerivation {
       inherit (cfg) name;
 
       requiredSystemFeatures = [ "libvirt" ];
@@ -322,14 +379,6 @@ in {
         '';
 
       phases = [ "buildPhase" ];
-
-      buildInputs = singleton (
-        writeScriptBin "extra-build-steps" ''
-          #!${bash}/bin/bash
-          set -e
-          ${cfg.extraBuildSteps}
-        ''
-      );
 
       inherit (cfg) succeedOnFailure;
 
@@ -355,12 +404,14 @@ in {
         }
 
         function run_one_build() {
-          testid="$(${pkgs.utillinux}/bin/uuidgen -r)"
+          testid="$(${utillinux}/bin/uuidgen -r)"
           testid="''${testid%%-*}"
           export testid="''${testid:0:7}"
           export subnet="$(($RANDOM % 255))"
           export build="$(readlink -m "$(mktemp -dp "$pwd")")"
           export mnt="$(readlink -m "$(mktemp -dp "$pwd")")"
+
+          echo "$out" > "$build/out"
 
           # Setup directories and libvirt XML files
           mkdir -p $build/{log,libvirt} $build/hosts/{${domList}}
@@ -374,11 +425,11 @@ in {
           chmod a+w -R $build
 
           log "Starting libvirt machines"
-          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+          ${libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshDestroyCmds}" &>/dev/null || true
-          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+          ${libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshCreateCmds}" >/dev/null || return
-          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+          ${libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "event dom-$testid lifecycle --timeout ${toString cfg.timeouts.singleTryTimeout}" >/dev/null &
           export virshpid=$!
 
@@ -399,7 +450,7 @@ in {
           try_starttime="$(now)"
           run_one_build || true
           log "Destroying libvirt machines"
-          ${pkgs.libvirt}/bin/virsh -c "${cfg.connectionURI}" \
+          ${libvirt}/bin/virsh -c "${cfg.connectionURI}" \
             "${virshDestroyCmds}" &>/dev/null || true
 
           try_time="$(($(now) - $try_starttime))"
@@ -424,10 +475,10 @@ in {
             fi
           else
             case "$(cat "$build/script.status")" in
-              0)
+              ${STATUS_PASS})
                 break
                 ;;
-              2)
+              ${STATUS_RETRY})
                 if ((retries_left <= 0)); then
                   err "Retries exhausted"
                   touch "$build/failed"
@@ -457,8 +508,6 @@ in {
             echo "file log $out/log/$i-$l.log"
           done; done
         ) >> $out/nix-support/hydra-build-products
-
-        out=$out extra-build-steps || touch $out/failed
 
         rm -f $out/script-status
         if [[ -a $out/failed ]]; then

@@ -145,13 +145,14 @@ let
     mount -t tmpfs -o mode=700 tmpfs "$root"
     mkdir "$root"/{proc,tmp,secrets}
     mount -t proc proc "$root/proc"
+
     for d in nix/store var etc root; do
       mkdir -p "$root/$d"
       mount  --make-rslave --bind "/$d" "$root/$d"
     done
     for d in run sys dev; do
       mkdir -p "$root/$d"
-      mount --make-rslave --rbind "/$d" "$root/$d"
+      mount --make-rslave --rbind "/$d" "$root/$d" || true
     done
 
     chroot "$root" "${writeScript "wrapped" ''

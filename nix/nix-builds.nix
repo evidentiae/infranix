@@ -16,6 +16,10 @@ let
       nixPath.sub = mkOption {
         type = types.str;
       };
+      fallback = mkOption {
+        type = types.bool;
+        default = true;
+      };
     };
   };
 
@@ -30,7 +34,8 @@ in {
   config.cli.commands.build.subCommands = mapAttrs (name: build: {
     binary = writeScript "build-${name}" ''
       #!${stdenv.shell}
-      exec ${nix}/bin/nix-build '<${build.nixPath.top}/${build.nixPath.sub}>' \
+      exec ${nix}/bin/nix-build ${if build.fallback then "--fallback" else ""} \
+        '<${build.nixPath.top}/${build.nixPath.sub}>' \
         "$@"
     '';
   }) config.nixBuilds;

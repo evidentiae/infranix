@@ -1,0 +1,62 @@
+#!/bin/sh
+
+set -e
+set -o pipefail
+
+export BASE_DIR="$1"
+shift
+origArgs=("$@")
+
+trap 'echo >&2 "Reloading shell..."; exec "$0" "$BASE_DIR" "${origArgs[@]}"' SIGHUP
+
+GIT_DIR="$BASE_DIR/.git" \
+  git describe --abbrev=7 --dirty --always --tags > "$BASE_DIR/.git-revision"
+
+mkdir -p "$BASE_DIR/.drvs"
+link="$(readlink -m "$BASE_DIR/.drvs/shell-$(cat "$BASE_DIR/.git-revision")-$(date +%s%N)")"
+
+nixPathArgs=("-f" "$BASE_DIR/paths.nix")
+nixShellArgs=()
+cmd=
+
+evalUniverse='let pkgs = import <nixpkgs> { config.allowUnfree = true; }; in pkgs.lib.evalModules { modules = [ ./default.nix { _module.args = { inherit pkgs; }; } ]; }'
+
+while [ "$#" -gt 0 ]; do
+  x="$1"; shift 1
+  case "$x" in
+    --run)
+      if [ "$#" -lt 1 ]; then
+        echo >&2 "No command specified"
+	exit 1
+      fi
+      cmd="$1"
+      shift
+      break
+      ;;
+    --)
+      break
+      ;;
+    *)
+      nixPathArgs+=("$x")
+      ;;
+  esac
+done
+
+eval "$(nix-path "${nixPathArgs[@]}" env | grep NIX_PATH)"
+export NIX_PATH
+
+if [ -z "$cmd" ]; then
+  nix-instantiate "$@" --indirect --add-root "$link.drv" \
+    -E "$evalUniverse" -A config.cli.build.nix-shell >/dev/null
+  TZ=UTC RELOADER_PID=$$ nix-shell "$link.drv" "$@"
+else
+  nix-build \
+    --out-link "$link" --drv-link "$link.drv" \
+    -E "$evalUniverse" -A config.cli.commands."$cmd".package
+  if [ -x "$link/bin/$cmd" ]; then
+    exec "$link/bin/$cmd" "$@"
+  else
+    echo >&2 "Build failed"
+    exit 1
+  fi
+fi

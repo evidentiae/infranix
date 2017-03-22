@@ -162,6 +162,14 @@ in {
           type = types.lines;
           default = "";
         };
+        buildInputs = mkOption {
+          type = types.listOf types.package;
+          default = [];
+        };
+        environment = mkOption {
+          type = types.attrs;
+          default = {};
+        };
       };
 
       commands = mkOption {
@@ -174,10 +182,12 @@ in {
   config = {
     cli.build.nix-shell = mkDefault (
       if cfg.commands == {} then throw "No cli commands defined" else config.withAssertions (
-        pkgs.runCommand "cli" {
+        pkgs.runCommand "cli" (cfg.nix-shell.environment // {
           inherit (cfg.nix-shell) shellHook;
-          buildInputs = map (cmd: cmd.package) (attrValues cfg.commands);
-        } ""
+          buildInputs =
+            cfg.nix-shell.buildInputs ++
+            map (cmd: cmd.package) (attrValues cfg.commands);
+        }) ""
       )
     );
 

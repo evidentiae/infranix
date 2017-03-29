@@ -74,15 +74,14 @@ let
   safeName = replaceStrings [":" " " "/"] ["_" "_" "_"];
 
   makefile = name: steps:
-    let steps' = filterAttrs (_: step: step.binary != null) steps;
-    in writeText "Makefile" (concatStrings (
+    writeText "Makefile" (concatStrings (
       mapAttrsToList (stepName: step: let target = safeName stepName; in ''
         .PHONY${optionalString step.interactive " .NOTPARALLEL"}: ${target}
         ${target}: ${toString (map safeName step.dependencies)}
         ''\t@echo >&2 "> ${name}:${stepName}"
-        ''\t@${step.binary} $(cmdargs)
-      '') steps' ++ singleton ''
-        all: ${toString (map safeName (attrNames steps'))}
+        ${if step.binary == null then "" else "\t@${step.binary} $(cmdargs)"}
+      '') steps ++ singleton ''
+        all: ${toString (map safeName (attrNames steps))}
       ''
     ));
 

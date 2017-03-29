@@ -19,7 +19,7 @@ nixPathArgs=("-f" "$BASE_DIR/paths.nix")
 nixShellArgs=()
 cmd=
 
-evalUniverse='let pkgs = import <nixpkgs> { config.allowUnfree = true; }; in pkgs.lib.evalModules { modules = [ ./default.nix { _module.args = { inherit pkgs; }; } ]; }'
+evalDefault='let pkgs = import <nixpkgs> { config.allowUnfree = true; }; in pkgs.lib.evalModules { modules = [ ./default.nix { _module.args = { inherit pkgs; }; } ]; }'
 
 while [ "$#" -gt 0 ]; do
   x="$1"; shift 1
@@ -47,13 +47,13 @@ export NIX_PATH
 
 if [ -z "$cmd" ]; then
   nix-instantiate "$@" --indirect --add-root "$link.drv" \
-    -E "$evalUniverse" -A config.cli.build.nix-shell >/dev/null
+    -E "$evalDefault" -A config.cli.build.nix-shell >/dev/null
   TZ=UTC RELOADER_PID=$$ nix-shell "$link.drv" "$@" --fallback
 else
   nix-build \
     --fallback \
     --out-link "$link" --drv-link "$link.drv" \
-    -E "$evalUniverse" -A config.cli.commands."$cmd".package
+    -E "$evalDefault" -A config.cli.commands."$cmd".package
   if [ -x "$link/bin/$cmd" ]; then
     exec "$link/bin/$cmd" "$@"
   else

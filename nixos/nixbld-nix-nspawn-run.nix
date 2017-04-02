@@ -25,7 +25,7 @@ in {
 
     # TODO Maybe we should support multiple wrappers with different groups,
     # but for now it is enough if it works in nix builds
-    security.wrappers.systemd-nspawn-runner = {
+    security.wrappers.nix-nspawn-run = {
       source = "${cfg.package}/bin/nix-nspawn-run";
       owner = "root";
       group = "nixbld";

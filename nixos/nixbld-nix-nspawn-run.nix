@@ -16,6 +16,12 @@ in {
     programs.nix-nspawn-run = {
       package = mkOption {
         type = types.package;
+        default = import (pkgs.fetchFromGitHub {
+          owner = "evidentiae";
+          repo = "nix-nspawn-run";
+          rev = "d26529aaf22946743976203ae5a47a5a1b9fc4fc";
+          sha256 ="1s0i0nmczimy0yxgngz33gjjx2c1b51iksmldzdhh2ii98gswika";
+        }) { inherit pkgs; };
       };
     };
 

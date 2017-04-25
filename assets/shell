@@ -48,7 +48,8 @@ export NIX_PATH
 if [ -z "$cmd" ]; then
   nix-instantiate "$@" --indirect --add-root "$link.drv" \
     -E "$evalDefault" -A config.cli.build.nix-shell >/dev/null
-  TZ=UTC RELOADER_PID=$$ nix-shell "$link.drv" "$@" --fallback
+  TZ=UTC RELOADER_PID=$$ nix-shell "$link.drv" "$@" --fallback \
+    --indirect --add-root "$link"
 else
   nix-build \
     --fallback \

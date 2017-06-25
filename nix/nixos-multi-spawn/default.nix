@@ -67,7 +67,10 @@ in {
       }) config.resources.nixos.hosts;
 
       configFile = writeText "nms.json" (toJSON {
-        inherit (cfg) tailFiles machines;
+        inherit (cfg) tailFiles;
+        machines = mapAttrs (_: m: {
+          inherit (m) environment inheritEnvVars nixosSystem;
+        }) cfg.machines;
         initBinary = writeScript "init" ''
           #!${stdenv.shell}
           ${cfg.initScript}

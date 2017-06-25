@@ -57,6 +57,7 @@ in {
 
   config = {
     nixos-multi-spawn = {
+      inherit (cfg) tailFiles;
       initScript = ''echo "$out" > /__out'';
       machines = mapAttrs (name: host: {
         environment.IP = "${ipMap.${name}}/16";

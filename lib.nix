@@ -1,6 +1,6 @@
 with builtins;
 
-{
+rec {
   hexByteToInt = s:
     let v = {
       "0" = 0; "1" = 1; "2" = 2; "3" = 3; "4" = 4; "5" = 5; "6" = 6; "7" = 7;
@@ -28,4 +28,8 @@ with builtins;
       s4 = substring 16 4 hash;
       s5 = substring 20 12 hash;
     in "${s1}-${s2}-${s3}-${s4}-${s5}";
+
+  genByte = s: n: toString (hexByteToInt (
+    substring n 2 (mkMAC s)
+  ));
 }

@@ -1,5 +1,5 @@
-# WARNING! This sets up nix-systemd-nspawn as a suid program. Theoretically
-# it should be fine, since nix-nspawn-run only runs unprivileged containers,
+# WARNING! This sets up nixos-multi-spawn as a suid program. Theoretically
+# it should be fine, since nixos-multi-spawn only runs unprivileged containers,
 # and gives no possibility to configure the systemd-nspawn options.
 
 { config, lib, pkgs, ... }:
@@ -8,19 +8,19 @@ with lib;
 
 let
 
-  cfg = config.programs.nix-nspawn-run;
+  cfg = config.programs.nixos-multi-spawn;
 
 in {
   options = {
 
-    programs.nix-nspawn-run = {
+    programs.nixos-multi-spawn = {
       package = mkOption {
         type = types.package;
         default = import (pkgs.fetchFromGitHub {
           owner = "evidentiae";
-          repo = "nix-nspawn-run";
-          rev = "d26529aaf22946743976203ae5a47a5a1b9fc4fc";
-          sha256 ="1s0i0nmczimy0yxgngz33gjjx2c1b51iksmldzdhh2ii98gswika";
+          repo = "nixos-multi-spawn";
+          rev = "b6ae1df2293628f7ee7e3d07a3b06ef1189b7b23";
+          sha256 ="1q1913i480468scsc58fpxgc1bv31wwmdwszfv5nsrvh8dmvzc4w";
         }) { inherit pkgs; };
       };
     };
@@ -31,8 +31,8 @@ in {
 
     # TODO Maybe we should support multiple wrappers with different groups,
     # but for now it is enough if it works in nix builds
-    security.wrappers.nix-nspawn-run = {
-      source = "${cfg.package}/bin/nix-nspawn-run";
+    security.wrappers.nixos-multi-spawn = {
+      source = "${cfg.package}/bin/nixos-multi-spawn";
       owner = "root";
       group = "nixbld";
       permissions = "u+rsx,g+x";

@@ -54,6 +54,9 @@ in {
   };
 
   config = {
+    resources.nixos.commonNixosImports = singleton {
+      boot.isContainer = true;
+    };
 
     nixos-multi-spawn = {
       initScript = ''

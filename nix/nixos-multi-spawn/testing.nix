@@ -66,7 +66,6 @@ in {
     };
 
     resources.nixos.commonNixosImports = singleton {
-      boot.isContainer = true;
       networking.useDHCP = false;
       networking.extraHosts = concatStrings (mapAttrsToList (n: host: ''
         ${ipMap.${n}} ${toString (unique (

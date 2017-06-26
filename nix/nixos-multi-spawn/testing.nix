@@ -58,7 +58,6 @@ in {
   config = {
     nixos-multi-spawn = {
       inherit (cfg) tailFiles;
-      initScript = ''echo "$out" > /__out'';
       machines = mapAttrs (name: host: {
         environment.IP = "${ipMap.${name}}/16";
         inheritEnvVars = [ "out" ];
@@ -88,6 +87,7 @@ in {
         );
         serviceConfig = {
           Type = "oneshot";
+          PassEnvironment = ["out"];
           ExecStart = "${writeScriptBin "test-script" ''
             #!${stdenv.shell}
 
@@ -95,9 +95,6 @@ in {
             cd /out
 
             trap '${systemd}/bin/systemctl poweroff --force --force' EXIT
-
-            export out="$(cat /__out)"
-            rm /__out
 
             (
               set -e

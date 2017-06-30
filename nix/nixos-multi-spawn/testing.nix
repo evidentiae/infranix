@@ -60,7 +60,6 @@ in {
       inherit (cfg) tailFiles;
       machines = mapAttrs (name: host: {
         environment.IP = "${ipMap.${name}}/16";
-        inheritEnvVars = [ "out" ];
       }) config.resources.nixos.hosts;
     };
 
@@ -87,7 +86,6 @@ in {
         );
         serviceConfig = {
           Type = "oneshot";
-          PassEnvironment = ["out"];
           ExecStart = "${writeScriptBin "test-script" ''
             #!${stdenv.shell}
 
@@ -127,7 +125,7 @@ in {
     testing.result = stdenv.mkDerivation {
       inherit (config) name;
 
-      requiredSystemFeatures = [ "nspawn" ];
+      requiredSystemFeatures = [ "nixos-multi-spawn" ];
 
       phases = [ "buildPhase" ];
 
@@ -136,9 +134,10 @@ in {
       buildPhase = ''
         build=fs/driver/out
 
-        rm -rf fs logs
-        ${cfg.wrapperPath} ${config.nixos-multi-spawn.configFile} || true
+        /run/current-system/sw/bin/nixos-multi-spawn-client \
+          ${config.nixos-multi-spawn.configFile} || true
 
+        mkdir -p "$build"
         if ! [ -a "$build/script.status" ]; then
           echo "Unknown result"
           touch "$build/failed"
@@ -151,7 +150,11 @@ in {
         mv $build $out
         mkdir -p $out/logs/nspawn
         cp -n logs/* $out/logs/nspawn/
-        mkdir -p $out/nix-support
+
+        if [ -a "$out/nix-support/hydra-build-products" ]; then
+          ${gnused}/bin/sed -i "s,@out@,$out,g" \
+            "$out/nix-support/hydra-build-products"
+        fi
 
         rm -f $out/script.status
         if [[ -a $out/failed ]]; then

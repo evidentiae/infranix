@@ -6,6 +6,25 @@ let
 
   cfg = config.services.nixos-multi-spawn;
 
+  setupLink = pkgs.writeScript "link-up" ''
+    #!${pkgs.stdenv.shell}
+
+    link="$1"
+
+    case "$link" in
+      vz-10*)
+        ${pkgs.iproute}/bin/ip addr add 10.''${link##vz-10}.0.1/16 dev "$link"
+        ;;
+      vz-172*)
+        ${pkgs.iproute}/bin/ip addr add 10.''${link##vz-172}.0.1/16 dev "$link"
+        ;;
+      *)
+        ;;
+    esac
+
+    ${pkgs.iproute}/bin/ip link set dev "$link" up
+  '';
+
   server = pkgs.writeScript "nixos-multi-spawn-server" ''
     #!${pkgs.stdenv.shell}
 
@@ -178,7 +197,7 @@ in {
       ''KERNEL=="vz-*"''
       ''SUBSYSTEM=="net"''
       ''ATTR{operstate}=="down"''
-      ''RUN+="${pkgs.iproute}/bin/ip link set dev %k up"''
+      ''RUN+="${setupLink} %k"''
     ];
 
     networking = {

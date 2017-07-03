@@ -28,7 +28,8 @@ let
   server = pkgs.writeScript "nixos-multi-spawn-server" ''
     #!${pkgs.stdenv.shell}
 
-    cd /tmp
+    mkdir -p /tmp/out
+    cd /tmp/out
 
     shutdown() {
       kill -TERM "$nms_pid" 2>/dev/null || true
@@ -66,7 +67,8 @@ let
       echo >&2 "Peer disconnected, exiting"
     else
       echo DONE
-      ${pkgs.gnutar}/bin/tar -c -f - --remove-files .
+      cd /tmp
+      ${pkgs.gnutar}/bin/tar -c -f - --remove-files -C out .
     fi
   '';
 

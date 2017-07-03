@@ -132,22 +132,26 @@ in {
       inherit (config.testing) succeedOnFailure;
 
       buildPhase = ''
-        build=fs/driver/out
-
         /run/current-system/sw/bin/nixos-multi-spawn-client \
           ${config.nixos-multi-spawn.configFile} || true
 
-        mkdir -p "$build"
-        if ! [ -a "$build/script.status" ]; then
-          echo "Unknown result"
-          touch "$build/failed"
-        elif [ "$(cat "$build/script.status")" != 0 ]; then
-          echo "Test script failed"
-          touch "$build/failed"
+        result=fs/driver/out
+        if ! [ -d "$result" ] || [ -z "$(ls -A "$result")" ]; then
+          echo >&2 "No results produced"
+          mkdir -p "$result"
+          touch "$result/this_dir_is_empty"
+          touch failed
+        elif ! [ -a "$result/script.status" ]; then
+          echo >&2 "No script status found"
+          touch failed
+        elif [ "$(cat "$result/script.status")" != 0 ]; then
+          rm "$result/script.status"
+          echo >&2 "Test script failed"
+          touch failed
         fi
 
         # Put build products in place
-        mv $build $out
+        mv $result $out
         mkdir -p $out/logs/nspawn
         cp -n logs/* $out/logs/nspawn/
 
@@ -156,9 +160,8 @@ in {
             "$out/nix-support/hydra-build-products"
         fi
 
-        rm -f $out/script.status
-        if [[ -a $out/failed ]]; then
-          rm $out/failed
+        if [ -a failed ]; then
+          echo >&2 "Build failed"
           exit 1
         fi
       '';

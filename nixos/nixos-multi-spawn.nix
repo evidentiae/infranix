@@ -66,7 +66,7 @@ let
       echo >&2 "Peer disconnected, exiting"
     else
       echo DONE
-      ${pkgs.gnutar}/bin/tar cf - .
+      ${pkgs.gnutar}/bin/tar -c -f - --remove-files .
     fi
   '';
 

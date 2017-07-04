@@ -203,8 +203,14 @@ in {
     ];
 
     networking = {
-      dhcpcd.denyInterfaces = [ "vb-*" ];
-      networkmanager.unmanaged = [ "interface-name:vb-*" ];
+      dhcpcd.denyInterfaces = [
+        "vb-*"
+        "vz-*"
+      ];
+      networkmanager.unmanaged = [
+        "interface-name:vb-*"
+        "interface-name:vz-*"
+      ];
     };
   };
 }

@@ -44,30 +44,42 @@ let
 
     buildInputs = [ bash makeWrapper ];
 
-    phases = [ "buildPhase" "fixupPhase" ];
+    patches = singleton (writeText "sub.patch" ''
+      --- a/completions/sub.bash
+      +++ b/completions/sub.bash
+      @@ -11,4 +11,6 @@ _sub() {
+         fi
+       }
+
+      -complete -F _sub sub
+      +if [ -n "''${BASH_VERSION-}" -a -n "''${PS1-}" ]; then
+      +  complete -F _sub sub
+      +fi
+    '');
 
     dontStrip = true;
 
     buildPhase = ''
-      cp -r "$src" $out
-      chmod u+w -R $out
-      cd $out
-
       ./prepare.sh "$name" >/dev/null
-      for prog in $out/bin/* $out/libexec/*; do
+      for prog in bin/* libexec/*; do
         wrapProgram "$prog" \
           --prefix PATH : ${stdenv.lib.makeBinPath [gnused gawk ncurses]}
       done
 
       mkdir -p nix-support
       ./bin/"$name" init - > nix-support/setup-hook
-      rm -rf share libexec/"$name"-init
+      rm -rf libexec/"$name"-init
 
       ${concatStrings (mapAttrsToList (subName: cmd:
         optionalString (cmd.binary != null) ''
-          cp -T "${cmd.binary}" "$out/libexec/$name-${subName}"
+          cp -T "${cmd.binary}" "libexec/$name-${subName}"
         ''
       ) subCommands)}
+    '';
+
+    installPhase = ''
+      mkdir $out
+      mv bin completions libexec $out/
     '';
   };
 
@@ -186,7 +198,7 @@ in {
           buildInputs =
             cfg.nix-shell.buildInputs ++
             map (cmd: cmd.package) (attrValues cfg.commands);
-        }) ""
+        }) "touch $out"
       )
     );
 

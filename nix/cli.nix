@@ -44,6 +44,8 @@ let
 
     buildInputs = [ bash makeWrapper ];
 
+    phases = [ "unpackPhase" "patchPhase" "buildPhase" "fixupPhase" ];
+
     patches = singleton (writeText "sub.patch" ''
       --- a/completions/sub.bash
       +++ b/completions/sub.bash
@@ -60,26 +62,26 @@ let
     dontStrip = true;
 
     buildPhase = ''
+      mkdir $out
+      mv README.md prepare.sh share bin completions libexec $out/
+
+      cd $out
+
       ./prepare.sh "$name" >/dev/null
-      for prog in bin/* libexec/*; do
+      for prog in $out/bin/* $out/libexec/*; do
         wrapProgram "$prog" \
           --prefix PATH : ${stdenv.lib.makeBinPath [gnused gawk ncurses]}
       done
 
       mkdir -p nix-support
       ./bin/"$name" init - > nix-support/setup-hook
-      rm -rf libexec/"$name"-init
+      rm -rf share libexec/"$name"-init
 
       ${concatStrings (mapAttrsToList (subName: cmd:
         optionalString (cmd.binary != null) ''
           cp -T "${cmd.binary}" "libexec/$name-${subName}"
         ''
       ) subCommands)}
-    '';
-
-    installPhase = ''
-      mkdir $out
-      mv bin completions libexec $out/
     '';
   };
 

@@ -151,7 +151,7 @@ let
     config = {
       completions = concatLists (mapAttrsToList (cmd: sub:
         if sub.completions == [] then [ "${name} ${cmd}" ]
-        else map (c: "${name} ${cmd} ${c}") sub.completions
+        else map (c: "${name} ${cmd} (${c})") (filter (c: c != "") sub.completions)
       ) config.subCommands);
     };
   };

@@ -8,17 +8,29 @@ let
 
   cfg = config.cli;
 
-  # TODO replace 'sub' with something nicer that can just take a JSON
-  # description of the available commands. Due to limitations in 'sub'
-  # we have to rebuild the whole sub each time a single command has been
-  # modified, and we have to copy commands into the sub's libexec
+  compleat = haskellPackages.callPackage (
+    { mkDerivation, base, directory, parsec, process, stdenv, unix }:
+    mkDerivation {
+      pname = "compleat";
+      version = "1.0";
+      src = fetchFromGitHub {
+        owner = "mbrubeck";
+        repo = "compleat";
+        rev = "905b779592f701b037fa500ee891f7be3d8bd2c3";
+        sha256 = "03mis6lpszfaj463pgcwk58cxhsw5i965sv923q6k2jw4lrk78cq";
+      };
+      isLibrary = false;
+      isExecutable = true;
+      executableHaskellDepends = [ base directory parsec process unix ];
+      license = stdenv.lib.licenses.mit;
+    }
+  ) {};
 
-  sub = fetchFromGitHub {
-    owner = "basecamp";
-    repo = "sub";
-    rev = "bb93f151df9e4219ae4153c83aad63ee6494a5d8";
-    sha256 = "0k5jw0783pbxfwixrh8c8iic8v9xlgxbyz88z1jiv5j6xvy2v9m7";
-  };
+  completionsFile = writeText "commands.compleat" (
+    concatStringsSep "; " (
+      concatMap (cmd: cmd.completions) (attrValues cfg.commands)
+    )
+  );
 
   stepOpts = {name, config, ... }: {
     options = {
@@ -37,53 +49,22 @@ let
     };
   };
 
-  mkSub = name: subCommands: stdenv.mkDerivation {
-    inherit name;
+  mkSub = name: subCommands: writeScriptBin name ''
+    #!${stdenv.shell}
 
-    src = sub;
-
-    buildInputs = [ bash makeWrapper ];
-
-    phases = [ "unpackPhase" "patchPhase" "buildPhase" "fixupPhase" ];
-
-    patches = singleton (writeText "sub.patch" ''
-      --- a/completions/sub.bash
-      +++ b/completions/sub.bash
-      @@ -11,4 +11,6 @@ _sub() {
-         fi
-       }
-
-      -complete -F _sub sub
-      +if [ -n "''${BASH_VERSION-}" -a -n "''${PS1-}" ]; then
-      +  complete -F _sub sub
-      +fi
-    '');
-
-    dontStrip = true;
-
-    buildPhase = ''
-      mkdir $out
-      mv README.md prepare.sh share bin completions libexec $out/
-
-      cd $out
-
-      ./prepare.sh "$name" >/dev/null
-      for prog in $out/bin/* $out/libexec/*; do
-        wrapProgram "$prog" \
-          --prefix PATH : ${stdenv.lib.makeBinPath [gnused gawk ncurses]}
-      done
-
-      mkdir -p nix-support
-      ./bin/"$name" init - > nix-support/setup-hook
-      rm -rf share libexec/"$name"-init
-
-      ${concatStrings (mapAttrsToList (subName: cmd:
-        optionalString (cmd.binary != null) ''
-          cp -T "${cmd.binary}" "libexec/$name-${subName}"
-        ''
-      ) subCommands)}
-    '';
-  };
+    case "$1" in
+    ${concatStrings (mapAttrsToList (cmd: sub: optionalString (sub.binary != null) ''
+      ${cmd})
+        shift 1
+        exec "${sub.binary}" "$@"
+        ;;
+    '') subCommands)}
+    *)
+      echo >&2 "Unknown sub command $1"
+      exit 1
+      ;;
+    esac
+  '';
 
   safeName = replaceStrings [":" " " "/"] ["_" "_" "_"];
 
@@ -119,6 +100,10 @@ let
       maxParallelism = mkOption {
         type = with types; nullOr int;
         default = null;
+      };
+      completions = mkOption {
+        type = with types; listOf str;
+        default = [];
       };
     };
     config = {
@@ -156,6 +141,18 @@ let
           else mkSteps name true config.maxParallelism steps
         );
       };
+
+      completions = mkOption {
+        type = with types; listOf str;
+        default = [];
+      };
+    };
+
+    config = {
+      completions = concatLists (mapAttrsToList (cmd: sub:
+        if sub.completions == [] then [ "${name} ${cmd}" ]
+        else map (c: "${name} ${cmd} ${c}") sub.completions
+      ) config.subCommands);
     };
   };
 
@@ -166,17 +163,17 @@ in {
 
   options = {
     cli = {
-      build.nix-shell = mkOption {
+      build.bashrc = mkOption {
         type = types.package;
       };
 
-      nix-shell = {
+      shell = {
         shellHook = mkOption {
           type = types.lines;
           default = "";
         };
-        buildInputs = mkOption {
-          type = types.listOf types.package;
+        path = mkOption {
+          type = with types; listOf package;
           default = [];
         };
         environment = mkOption {
@@ -193,24 +190,34 @@ in {
   };
 
   config = {
-    cli.build.nix-shell = mkDefault (
-      if cfg.commands == {} then throw "No cli commands defined" else config.withAssertions (
-        pkgs.runCommand "cli" (cfg.nix-shell.environment // {
-          inherit (cfg.nix-shell) shellHook;
-          buildInputs =
-            cfg.nix-shell.buildInputs ++
-            map (cmd: cmd.package) (attrValues cfg.commands);
-        }) "touch $out"
-      )
-    );
+    cli.shell.environment.PATH = "${makeBinPath cfg.shell.path}:$PATH";
 
-    cli.nix-shell.shellHook = ''
+    cli.shell.path = map (cmd: cmd.package) (attrValues cfg.commands);
+
+    cli.build.bashrc = writeText "bashrc" ''
+      ${concatStrings (mapAttrsToList (k: v: ''
+        export ${k}="${toString v}"
+      '') cfg.shell.environment)}
+      ${cfg.shell.shellHook}
+    '';
+
+    cli.shell.shellHook = ''
       if [ -n "$RELOADER_PID" ]; then
         reload() {
           kill -1 "$RELOADER_PID"
           exit &>/dev/null
         }
       fi
+
+      _run_compleat() {
+        export COMP_POINT COMP_CWORD COMP_WORDS COMPREPLY BASH_VERSINFO COMP_LINE
+        ${compleat}/bin/compleat "$@"
+      }
+
+      for COMMAND in `${compleat}/bin/compleat ${completionsFile}`; do
+        complete -o nospace -o default \
+          -C "_run_compleat ${completionsFile} $COMMAND" $COMMAND
+      done
     '';
   };
 }

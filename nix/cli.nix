@@ -214,10 +214,12 @@ in {
         ${compleat}/bin/compleat "$@"
       }
 
-      for COMMAND in `${compleat}/bin/compleat ${completionsFile}`; do
-        complete -o nospace -o default \
-          -C "_run_compleat ${completionsFile} $COMMAND" $COMMAND
-      done
+      if [ -s "${completionsFile}" ]; then
+        for COMMAND in `${compleat}/bin/compleat ${completionsFile}`; do
+          complete -o nospace -o default \
+            -C "_run_compleat ${completionsFile} $COMMAND" $COMMAND
+        done
+      fi
     '';
   };
 }

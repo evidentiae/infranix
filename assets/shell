@@ -9,11 +9,8 @@ origArgs=("$@")
 
 trap 'echo >&2 "Reloading shell..."; exec "$0" "$BASE_DIR" "${origArgs[@]}"' SIGHUP
 
-GIT_DIR="$BASE_DIR/.git" \
-  git describe --abbrev=7 --dirty --always --tags > "$BASE_DIR/.git-revision"
-
 mkdir -p "$BASE_DIR/.drvs"
-link="$(readlink -m "$BASE_DIR/.drvs/shell-$(cat "$BASE_DIR/.git-revision")-$(date +%s%N)")"
+link="$(readlink -m "$BASE_DIR/.drvs/shell-$(date +%s%N)")"
 
 nixPathArgs=("-f" "$BASE_DIR/paths.nix")
 cmd=

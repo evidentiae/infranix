@@ -194,12 +194,12 @@ in {
 
     cli.shell.path = map (cmd: cmd.package) (attrValues cfg.commands);
 
-    cli.build.bashrc = writeText "bashrc" ''
+    cli.build.bashrc = config.withAssertions (writeText "bashrc" ''
       ${concatStrings (mapAttrsToList (k: v: ''
         export ${k}="${toString v}"
       '') cfg.shell.environment)}
       ${cfg.shell.shellHook}
-    '';
+    '');
 
     cli.shell.shellHook = ''
       if [ -n "$RELOADER_PID" ]; then

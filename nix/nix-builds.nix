@@ -7,6 +7,10 @@ let
 
   buildOpts = { ... }: {
     options = {
+      enabled = mkOption {
+        type = types.bool;
+        default = true;
+      };
       description = mkOption {
         type = types.str;
       };

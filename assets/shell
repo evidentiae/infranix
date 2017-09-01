@@ -38,7 +38,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-NIX_PATH="$(nix-path "${nixPathArgs[@]}" env | grep NIX_PATH | cut -d = --complement -f 1)"
+NIX_PATH="$(nix-path "${nixPathArgs[@]}" env | grep '^NIX_PATH=' | cut -d = --complement -f 1)"
 export NIX_PATH
 
 if [ -z "$cmd" ]; then

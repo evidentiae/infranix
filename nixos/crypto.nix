@@ -122,54 +122,57 @@ let
     };
   };
 
-  mkDecryptWrapper = secretNames: writeScript "decrypt-wrapper" ''
-    #!${bash}/bin/bash
-    set -eu
-
-    PATH="${utillinux}/bin:$PATH"
-
-    if ! [ "$(id -u)" == "0" ]; then
-      echo >&2 "You must be root"
-      exit 1
-    fi
-
-    root="$(mktemp -d)"
-
-    function cleanup() {
-      umount --recursive "$root"
-      rmdir "$root"
-    }
-
-    trap cleanup SIGINT SIGTERM EXIT
-
-    mount -t tmpfs -o mode=700 tmpfs "$root"
-    mkdir "$root"/{proc,tmp,secrets}
-    mount -t proc proc "$root/proc"
-
-    for d in nix/store var etc root; do
-      mkdir -p "$root/$d"
-      mount  --make-rslave --bind "/$d" "$root/$d"
-    done
-    for d in run sys dev; do
-      mkdir -p "$root/$d"
-      mount --make-rslave --rbind "/$d" "$root/$d" || true
-    done
-
-    chroot "$root" "${writeScript "wrapped" ''
+  mkDecryptWrapper = secretNames: writeScript "decrypt-wrapper" (
+    if cfg.dummy then ''
+      #!${bash}/bin/bash
+      exec "$@"
+    '' else ''
       #!${bash}/bin/bash
       set -eu
-      ${concatMapStrings (s: let secret = cfg.secrets.${s}; in
-        decryptSecretScript {
-          inherit secret;
-          path = "/secrets/${s}";
-          user = "root";
-          group = "root";
-        }
-      ) secretNames}
-      exec "$@"
-    ''}" "$@"
-  '';
 
+      PATH="${utillinux}/bin:$PATH"
+
+      if ! [ "$(id -u)" == "0" ]; then
+        echo >&2 "You must be root"
+        exit 1
+      fi
+
+      root="$(mktemp -d)"
+
+      function cleanup() {
+        umount --recursive "$root"
+        rmdir "$root"
+      }
+
+      trap cleanup SIGINT SIGTERM EXIT
+
+      mount -t tmpfs -o mode=700 tmpfs "$root"
+      mkdir "$root"/{proc,tmp,secrets}
+      mount -t proc proc "$root/proc"
+
+      for d in nix/store var etc root; do
+        mkdir -p "$root/$d"
+        mount  --make-rslave --bind "/$d" "$root/$d"
+      done
+      for d in run sys dev; do
+        mkdir -p "$root/$d"
+        mount --make-rslave --rbind "/$d" "$root/$d" || true
+      done
+
+      chroot "$root" "${writeScript "wrapped" ''
+        #!${bash}/bin/bash
+        set -eu
+        ${concatMapStrings (s: let secret = cfg.secrets.${s}; in
+          decryptSecretScript {
+            inherit secret;
+            path = "/secrets/${s}";
+            user = "root";
+            group = "root";
+          }
+        ) secretNames}
+        exec "$@"
+      ''}" "$@"
+    '');
 
 in {
 
@@ -204,6 +207,20 @@ in {
     systemd.services = mkMerge (
       dependentServices ++ decryptServices ++ purgeOldSecrets
     );
-  };
 
+    system.activationScripts = mkIf cfg.dummy {
+      install-dummy-secrets.deps = [];
+      install-dummy-secrets.text = ''
+        mkdir -p /secrets
+        ${concatMapStrings ({name, value}:
+          decryptSecretScript {
+            secret = value;
+            path = "/secrets/${name}";
+            user = "root";
+            group = "root";
+          }
+        ) (mapAttrsToList nameValuePair cfg.secrets)}
+      '';
+    };
+  };
 }

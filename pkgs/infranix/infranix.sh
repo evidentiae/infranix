@@ -38,7 +38,7 @@ export BASE_DIR
 mkdir -p "$BASE_DIR/.drvs"
 link="$(readlink -m "$BASE_DIR/.drvs/shell-$(date +%s%N)")"
 
-nixPathArgs=("-f" "$BASE_DIR/paths.nix" "${arr[@]}")
+nixPathArgs=("-f" "$BASE_DIR/paths.nix" "${nixPathArgs[@]}")
 
 trap 'echo >&2 "Reloading shell..."; exec "$0" -d "$BASE_DIR" "${origArgs[@]}"' SIGHUP
 

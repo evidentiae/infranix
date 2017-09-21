@@ -167,7 +167,15 @@ in {
         type = types.package;
       };
 
+      build.bootstrapScript = mkOption {
+        type = types.package;
+      };
+
       shell = {
+        bootstrapScript = mkOption {
+          type = types.lines;
+          default = "";
+        };
         shellHook = mkOption {
           type = types.lines;
           default = "";
@@ -200,6 +208,11 @@ in {
       '') cfg.shell.environment)}
       ${cfg.shell.shellHook}
     '');
+
+    cli.build.bootstrapScript = writeScript "bootstrap.sh" ''
+      #!${stdenv.shell}
+      ${cfg.shell.bootstrapScript}
+    '';
 
     cli.shell.shellHook = ''
       if [ -n "$RELOADER_PID" ]; then

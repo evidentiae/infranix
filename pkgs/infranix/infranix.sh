@@ -53,7 +53,7 @@ evalDefault='let pkgs = import <nixpkgs> { config.allowUnfree = true; }; in pkgs
 
 if [ -n "$bootstrap" ]; then
   nix-build --fallback --out-link "$link-bootstrap" --drv-link "$link-bootstrap.drv" \
-    -E "$evalDefault" -A config.cli.build.bootstrapScript &>/dev/null || true
+    -E "$evalDefault" -A config.cli.build.bootstrapScript
   if [ -x "$link-bootstrap" ]; then
     "$link-bootstrap"
   fi

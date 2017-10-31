@@ -6,24 +6,7 @@ let
 
   cfg = config.services.nixos-multi-spawn;
 
-  setupLink = pkgs.writeScript "link-up" ''
-    #!${pkgs.stdenv.shell}
-
-    link="$1"
-
-    case "$link" in
-      vz-10*)
-        ${pkgs.iproute}/bin/ip addr add 10.''${link##vz-10}.0.1/16 dev "$link"
-        ;;
-      vz-172*)
-        ${pkgs.iproute}/bin/ip addr add 10.''${link##vz-172}.0.1/16 dev "$link"
-        ;;
-      *)
-        ;;
-    esac
-
-    ${pkgs.iproute}/bin/ip link set dev "$link" up
-  '';
+  netRegex = "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$";
 
   server = pkgs.writeScript "nixos-multi-spawn-server" ''
     #!${pkgs.stdenv.shell}
@@ -44,21 +27,45 @@ let
 
     trap shutdown TERM INT
 
+    # Read arguments send through the socket by the client
     while read line; do
       case "$line" in
-      START)
-        ${cfg.package}/bin/nixos-multi-spawn nixos-multi-spawn.json 2>&1 &
-        nms_pid=$!
-        break
-        ;;
-      *)
-        echo "$line" >> nixos-multi-spawn.json
-        ;;
+        NET=*)
+          net=''${line/NET=/}
+          ;;
+        CONFIG=*)
+          echo "''${line/CONFIG=/}" >> nixos-multi-spawn.json
+          ${cfg.package}/bin/nixos-multi-spawn nixos-multi-spawn.json 2>&1 &
+          nms_pid=$!
+          break
+          ;;
+        *) ;;
       esac
     done
 
+    if [ -z "$nms_pid" ]; then
+      echo >&2 "error: No nixos-multi-spawn configuration provided"
+      exit 1
+    fi
+
     wait_for_eof <&1 &
     eof_pid=$!
+
+    if [[ "$net" =~ ${netRegex} ]]; then
+      netid="$(${pkgs.jq}/bin/jq -r .netid nixos-multi-spawn.json)"
+      if [ -n "$netid" ] && [ "$netid" != null ]; then
+        prefix="''${net#*/}"
+        ip="$(${pkgs.ipcalc}/bin/ipcalc -nb "$net" | \
+          ${pkgs.gnugrep}/bin/grep HostMin | ${pkgs.gawk}/bin/awk '{print $2}')/$prefix"
+        iproute=${pkgs.iproute}/bin/ip
+        link="vz-$netid"
+        while ! $iproute link show "$link" &>/dev/null; do
+          ${pkgs.coreutils}/bin/sleep 0.1
+        done
+        $iproute addr add "$ip" dev "$link"
+        $iproute link set dev "$link" up
+      fi
+    fi
 
     wait -n "$nms_pid" "$eof_pid" || true
     shutdown
@@ -74,10 +81,12 @@ let
 
   client = pkgs.writeScriptBin "nixos-multi-spawn-client" ''
     #!${pkgs.stdenv.shell}
-
     set -e
+    set -o pipefail
 
     config="$1"
+    net="$2"
+    socat=${pkgs.socat}/bin/socat
     socket="/run/nixos-multi-spawn/$(id -gn).socket"
 
     if ! [ -w "$socket" ]; then
@@ -90,15 +99,33 @@ let
       exit 1
     fi
 
-    echo -e "\nSTART" | cat "$config" - | \
-      ${pkgs.socat}/bin/socat -,ignoreeof UNIX-CONNECT:"$socket" | \
-        while read line; do
-          if [ "$line" == "DONE" ]; then
-            ${pkgs.gnutar}/bin/tar xBf -
-          else
-            echo "$line"
-          fi
-        done || true
+    if [ -z "$net" ] || ! [[ "$net" =~ ${netRegex} ]]; then
+      echo >&2 "Invalid net '$net'"
+      exit 1
+    fi
+
+    function printargs() {
+      echo -e "\n$1"
+      test -n "$net" && echo -e "\nNET=$net"
+      echo "CONFIG=$(${pkgs.jq}/bin/jq -cr . "$config")"
+    }
+
+    function notify_ready() {
+      if [ -n "$NOTIFY_SOCKET" ]; then
+        echo "READY=1" | $socat UNIX-SENDTO:$NOTIFY_SOCKET STDIO
+      fi
+    }
+
+    printargs | $socat -,ignoreeof UNIX-CONNECT:"$socket" | (
+      notify_ready
+      while read line; do
+        if [ "$line" == "DONE" ]; then
+          ${pkgs.gnutar}/bin/tar xBf -
+        else
+          echo "$line"
+        fi
+      done
+    )
   '';
 
 in {
@@ -157,50 +184,23 @@ in {
 
     systemd.services = mkMerge (
       (map (group: {
-        "nixos-multi-spawn-${group}@".serviceConfig = {
-          PrivateTmp = true;
-          KillMode = "process";
-          ExecStart = "${pkgs.socat}/bin/socat FD:3 EXEC:${server},nofork";
-        };
-      }) cfg.allowedGroups) ++
-      singleton {
-        empty-bridge-cleaner = {
-          wantedBy = [ "multi-user.target" ];
-          startAt = "*-*-* *:30:00";
-          path = with pkgs; [ iproute findutils ];
-          script = ''
-            links="$(bridge link show)"
-
-            for b in $(ip -o link show type bridge | cut -d : -f2 | \
-              tr -d ' ' | egrep '^vz-')
-            do
-              if ! (echo "$links" | grep -q " master $b "); then
-                echo "Deleting empty bridge $b"
-                ip link del "$b" || true
-              fi
-            done
-          '';
+        "nixos-multi-spawn-${group}@" = {
+          reloadIfChanged = false;
+          restartIfChanged = false;
           serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = "false";
-            Restart = "no";
+            PrivateTmp = true;
+            KillMode = "process";
+            Type = "notify";
+            NotifyAccess = "all";
+            ExecStart = "${pkgs.socat}/bin/socat FD:3 EXEC:${server},nofork";
           };
         };
-      }
+      }) cfg.allowedGroups)
     );
 
     # Each container takes at least 4 inotify file handles, so you quickly reach
     # limit 128 when spawning many containers
     boot.kernel.sysctl."fs.inotify.max_user_instances" = 2048;
-
-    # systemd-nspawn doesn't automatically up the bridge so we do it with udev
-    # Probably nicer to do with networkd, but we're not using that yet
-    services.udev.extraRules = concatStringsSep ", " [
-      ''KERNEL=="vz-*"''
-      ''SUBSYSTEM=="net"''
-      ''ATTR{operstate}=="down"''
-      ''RUN+="${setupLink} %k"''
-    ];
 
     networking = {
       dhcpcd.denyInterfaces = [

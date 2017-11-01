@@ -30,6 +30,6 @@ rec {
     in "${s1}-${s2}-${s3}-${s4}-${s5}";
 
   genByte = s: n: toString (hexByteToInt (
-    substring n 2 (mkMAC s)
+    substring n 2 (hashString "sha1" s)
   ));
 }

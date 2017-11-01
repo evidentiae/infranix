@@ -18,7 +18,6 @@ in {
   imports = [
     ../testing.nix
     ./default.nix
-    ../named.nix
   ];
 
   options = {
@@ -35,14 +34,6 @@ in {
     };
 
     testing.nixos-multi-spawn = {
-      wrapperPath = mkOption {
-        type = types.path;
-        default = "/run/wrappers/bin/nixos-multi-spawn";
-        description = ''
-          The location of the nixos-multi-spawn suid wrapper. It must be
-          executable by the Nix build users
-        '';
-      };
       tailFiles = mkOption {
         type = with types; listOf str;
         default = [

@@ -27,6 +27,7 @@ let
 in {
   imports = [
     ../resources/nixos-hosts.nix
+    ../named.nix
   ];
 
   options = {
@@ -47,8 +48,8 @@ in {
       };
 
       netid = mkOption {
-        type = with types; nullOr str;
-        default = null;
+        type = types.str;
+        default = substring 0 4 (hashString "sha1" config.name);
       };
 
       configFile = mkOption {

@@ -124,7 +124,7 @@ in {
 
       buildPhase = ''
         /run/current-system/sw/bin/nixos-multi-spawn-client \
-          ${config.nixos-multi-spawn.configFile} || true
+          ${config.nixos-multi-spawn.configFile} 10.42.0.0/16 || true
 
         result=fs/driver/out
         if ! [ -d "$result" ] || [ -z "$(ls -A "$result")" ]; then

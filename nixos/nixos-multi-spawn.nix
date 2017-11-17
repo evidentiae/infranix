@@ -27,6 +27,8 @@ let
 
     trap shutdown TERM INT
 
+    zone=$(od -vAn -N4 -tu4 < /dev/urandom | tr -d ' ')
+
     # Read arguments send through the socket by the client
     while read line; do
       case "$line" in
@@ -35,7 +37,7 @@ let
           ;;
         CONFIG=*)
           echo "''${line/CONFIG=/}" >> nixos-multi-spawn.json
-          ${cfg.package}/bin/nixos-multi-spawn nixos-multi-spawn.json 2>&1 &
+          ${cfg.package}/bin/nixos-multi-spawn nixos-multi-spawn.json "$zone" 2>&1 &
           nms_pid=$!
           break
           ;;
@@ -52,19 +54,16 @@ let
     eof_pid=$!
 
     if [[ "$net" =~ ${netRegex} ]]; then
-      netid="$(${pkgs.jq}/bin/jq -r .netid nixos-multi-spawn.json)"
-      if [ -n "$netid" ] && [ "$netid" != null ]; then
-        prefix="''${net#*/}"
-        ip="$(${pkgs.ipcalc}/bin/ipcalc -nb "$net" | \
-          ${pkgs.gnugrep}/bin/grep HostMin | ${pkgs.gawk}/bin/awk '{print $2}')/$prefix"
-        iproute=${pkgs.iproute}/bin/ip
-        link="vz-$netid"
-        while ! $iproute link show "$link" &>/dev/null; do
-          ${pkgs.coreutils}/bin/sleep 0.1
-        done
-        $iproute addr add "$ip" dev "$link"
-        $iproute link set dev "$link" up
-      fi
+      prefix="''${net#*/}"
+      ip="$(${pkgs.ipcalc}/bin/ipcalc -nb "$net" | \
+        ${pkgs.gnugrep}/bin/grep HostMin | ${pkgs.gawk}/bin/awk '{print $2}')/$prefix"
+      iproute=${pkgs.iproute}/bin/ip
+      link="vz-$zone"
+      while ! $iproute link show "$link" &>/dev/null; do
+        ${pkgs.coreutils}/bin/sleep 0.1
+      done
+      $iproute addr add "$ip" dev "$link"
+      $iproute link set dev "$link" up
     fi
 
     wait -n "$nms_pid" "$eof_pid" || true
@@ -142,8 +141,8 @@ in {
         default = import (pkgs.fetchFromGitHub {
           owner = "evidentiae";
           repo = "nixos-multi-spawn";
-          rev = "77ee14b56f900f03f52fca118e297bf0154d49fc";
-          sha256 ="1ipj1yrkvssbq2k3vyvlw078gw2xvc6ifj854sfmkpnm319xgjvi";
+          rev = "d75185f01e0fc425add813fd83398a556b791a85";
+          sha256 ="1b3lnikh66nlz20yi35vq169qn8qjj4cy6dqi91zyy48x5bkl49q";
         }) { inherit pkgs; };
       };
 

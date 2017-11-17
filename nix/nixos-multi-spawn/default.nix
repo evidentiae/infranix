@@ -47,11 +47,6 @@ in {
         default = {};
       };
 
-      netid = mkOption {
-        type = types.str;
-        default = substring 0 4 (hashString "sha1" config.name);
-      };
-
       configFile = mkOption {
         type = types.package;
       };
@@ -74,7 +69,7 @@ in {
         nixosSystem = host.nixos.out.system;
       }) config.resources.nixos.hosts;
 
-      configFile = writeText "nms.json" (toJSON ({
+      configFile = writeText "nms.json" (toJSON {
         inherit (cfg) tailFiles;
         machines = mapAttrs (_: m: {
           inherit (m) environment inheritEnvVars nixosSystem;
@@ -84,9 +79,7 @@ in {
           ${cfg.initScript}
           exec "$@"
         '';
-      } // optionalAttrs (cfg.netid != null) {
-        inherit (cfg) netid;
-      }));
+      });
     };
 
   };

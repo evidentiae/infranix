@@ -187,6 +187,7 @@ in {
           reloadIfChanged = false;
           restartIfChanged = false;
           serviceConfig = {
+            LimitNOFILE = "infinity";
             PrivateTmp = true;
             KillMode = "process";
             Type = "notify";
@@ -200,6 +201,7 @@ in {
     # Each container takes at least 4 inotify file handles, so you quickly reach
     # limit 128 when spawning many containers
     boot.kernel.sysctl."fs.inotify.max_user_instances" = 2048;
+    boot.kernel.sysctl."vm.max_map_count" = 262144;
 
     networking = {
       dhcpcd.denyInterfaces = [

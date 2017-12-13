@@ -128,10 +128,9 @@ in {
 
         result=fs/driver/out
         if ! [ -d "$result" ] || [ -z "$(ls -A "$result")" ]; then
-          echo >&2 "No results produced"
-          mkdir -p "$result"
-          touch "$result/this_dir_is_empty"
-          touch failed
+          echo >&2 "No results produced, aborting build"
+          mkdir -p "$result/nix-support"
+          touch "$result/nix-support/aborted"
         elif ! [ -a "$result/script.status" ]; then
           echo >&2 "No script status found"
           touch failed
@@ -144,7 +143,9 @@ in {
         # Put build products in place
         mv $result $out
         mkdir -p $out/logs/nspawn
-        cp -n logs/* $out/logs/nspawn/
+        if [ -d logs ]; then
+          cp -nrT logs $out/logs/nspawn
+        fi
 
         if [ -a "$out/nix-support/hydra-build-products" ]; then
           ${gnused}/bin/sed -i "s,@out@,$out,g" \

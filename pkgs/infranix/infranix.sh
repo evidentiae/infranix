@@ -46,8 +46,9 @@ mkdir -p "$BASE_DIR/.drvs"
 link="$(readlink -m "$BASE_DIR/.drvs/shell-$(date +%s%N)")"
 
 nixPathArgs=("-f" "$BASE_DIR/paths.nix" "${nixPathArgs[@]}")
-NIX_PATH="$(nix-path "${nixPathArgs[@]}" env | grep '^NIX_PATH=' | cut -d = --complement -f 1)"
-export NIX_PATH
+nixPathVars="$(nix-path "${nixPathArgs[@]}" env | grep 'NIX_PATH')"
+export NIX_PATH="$(echo "$nixPathVars" | grep '^NIX_PATH=' | head -n1 | cut -d = --complement -f 1)"
+export NIX_PATH_GIT_CACHE="$(echo "$nixPathVars" | grep '^NIX_PATH_GIT_CACHE=' | head -n1 | cut -d = --complement -f 1)"
 
 evalDefault='let pkgs = import <nixpkgs> { config.allowUnfree = true; }; in pkgs.lib.evalModules { modules = [ ./default.nix { _module.args = { inherit pkgs; }; } ]; }'
 

@@ -138,13 +138,12 @@ in {
 
       package = mkOption {
         type = types.package;
-        default = import /home/david/dev/evs/nixos-multi-spawn { inherit pkgs; };
-        #default = import (pkgs.fetchFromGitHub {
-        #  owner = "evidentiae";
-        #  repo = "nixos-multi-spawn";
-        #  rev = "d75185f01e0fc425add813fd83398a556b791a85";
-        #  sha256 ="1b3lnikh66nlz20yi35vq169qn8qjj4cy6dqi91zyy48x5bkl49q";
-        #}) { inherit pkgs; };
+        default = import (pkgs.fetchFromGitHub {
+          owner = "evidentiae";
+          repo = "nixos-multi-spawn";
+          rev = "d6b7defc54742b2b625249f86eb174dfcd06ddc2";
+          sha256 ="13vixxkypfghyba5haqml18f28s777hkwbxz6cp3y53k41n7s6ag";
+        }) { inherit pkgs; };
       };
 
       allowedGroups = mkOption {

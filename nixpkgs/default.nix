@@ -61,7 +61,7 @@ with builtins;
   writeHaskellScriptBin = name: args: script: super.stdenv.mkDerivation {
     inherit name;
     phases = [ "installPhase" ];
-    script = writeHaskellScript name args script;
+    script = self.writeHaskellScript name args script;
     installPhase = ''
       mkdir -p $out/bin
       ln -s "$script" "$out/bin/$name"

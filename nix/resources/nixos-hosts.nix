@@ -39,7 +39,7 @@ in {
       };
 
       nixos.commonBaseImports = mkOption {
-        type = with types; nullOr (listOf string);
+        type = with types; nullOr (listOf path);
         default = null;
       };
 

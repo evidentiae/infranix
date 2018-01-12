@@ -14,7 +14,7 @@ with builtins;
         '';
       };
       baseImports = mkOption {
-        type = with types; nullOr (listOf string);
+        type = with types; nullOr (listOf path);
         default = null;
         description = ''
           This option overrides the list of module paths that constitute the
@@ -63,7 +63,7 @@ with builtins;
             system = builtins.currentSystem;
             modules = [ { inherit (config.nixos) imports; } ];
           } // optionalAttrs (config.nixos.baseImports != null) {
-            baseModules = map (s: "${toString pkgs.path}/nixos/modules/${s}") config.nixos.baseImports;
+            baseModules = config.nixos.baseImports;
           };
 
           eval = import "${toString pkgs.path}/nixos/lib/eval-config.nix" args;

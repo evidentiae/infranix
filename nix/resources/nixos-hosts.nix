@@ -18,6 +18,7 @@ let
       _module.args = { inherit pkgs; };
       inherit name;
       nixos.imports = cfg.commonNixosImports;
+      nixos.baseImports = cfg.commonBaseImports;
     };
   };
 
@@ -35,6 +36,11 @@ in {
       nixos.commonNixosImports = mkOption {
         type = with types; listOf unspecified;
         default = [];
+      };
+
+      nixos.commonBaseImports = mkOption {
+        type = with types; nullOr (listOf string);
+        default = null;
       };
 
       nixos.hosts = mkOption {

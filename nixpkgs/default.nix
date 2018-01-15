@@ -7,8 +7,8 @@ with builtins;
     super.fetchFromGitHub {
       owner = "imsl";
       repo = "nix-path";
-      rev = "fb2dc3d2375d7b895153344cddd98f53611ab3bd";
-      sha256 ="1l3drl5ixvz5bbmcmniwx1vk6nspadaxax61hvrcqr90iysny27d";
+      rev = "67c955dafbecf7af311e0d3bc72a8ca03db70270";
+      sha256 ="1akamqxfiqhg7fr01y62pz3211ycz6lcyz0y5z9qjdn53y10nzag";
     }
   ) {
     pipes-concurrency = self.haskellPackages.pipes-concurrency_2_0_8;

@@ -10,6 +10,9 @@ let
     us-west = -8;
     us-central = -6;
     us-east = -5;
+    ca-west = -8;
+    ca-central = -6;
+    ca-east = -5;
     eu-west = 1;
     asia-east = 8;
     asia-northeast = 9;

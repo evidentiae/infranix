@@ -6,34 +6,16 @@ with builtins;
 let
 
   cfg = config.export;
-
-  filteredAttrs = setAttrByPath cfg.prefix (
-    recursiveUpdate (filterAttrs [] config) cfg.extraConfig
-  );
+  opts = options.export;
 
   isPrefixOf = xs: ys: take (length xs) ys == xs;
 
   excludePath = path:
     path == [] ||
-    last path == "_module" ||
     any (exc: isPrefixOf exc path) cfg.excludeConfig;
 
   includePath = path:
     any (inc: isPrefixOf inc path) cfg.includeConfig;
-
-  recursePath = path:
-    !(excludePath path) &&
-    (includePath path || any (inc: isPrefixOf path inc) cfg.includeConfig);
-
-  filterAttrs = path: attrs:
-    let nonExcludedSubPaths = filter (n: recursePath (path ++ [n])) (attrNames attrs); in
-      listToAttrs (map (n: nameValuePair n (
-        let
-          v = attrs.${n};
-        in
-          if includePath (path ++ [n]) && (!(isAttrs v) || isDerivation v) then v
-          else filterAttrs (path ++ [n]) v
-      )) nonExcludedSubPaths);
 
 in {
   options = {
@@ -70,6 +52,16 @@ in {
           type = types.package;
           readOnly = true;
         };
+
+        config = mkOption {
+          type = types.attrs;
+          readOnly = true;
+        };
+
+        options = mkOption {
+          type = with types; listOf attrs;
+          readOnly = true;
+        };
       };
 
     };
@@ -81,14 +73,28 @@ in {
     export.build.nixosConfig = { ... }: {
       options = mapAttrsRecursiveCond (as: !(isDerivation as)) (_: _: mkOption {
         type = types.unspecified;
-      }) filteredAttrs;
+        readOnly = true;
+      }) cfg.build.config;
 
-      config = filteredAttrs;
+      config = cfg.build.config;
     };
 
     export.build.jsonFile = pkgs.writeText "config.json" (
-      toJSON (filterAttrsRecursive (_: v: !(isFunction v)) filteredAttrs)
+      toJSON (filterAttrsRecursive (_: v: !(isFunction v)) cfg.build.config)
     );
+
+    export.build.config = foldr recursiveUpdate {} (map (o:
+      optionalAttrs o.isDefined (
+        let v = getAttrFromPath o.loc config;
+        in setAttrByPath o.loc (
+          if isAttrs v then filterAttrsRecursive (n: _: n != "_module") v else v
+        )
+      )
+    ) cfg.build.options);
+
+    export.build.options = filter (o:
+      !(excludePath o.loc) && includePath o.loc
+    ) (collect isOption options);
 
   };
 }

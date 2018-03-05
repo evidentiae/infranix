@@ -3,6 +3,12 @@ self: super:
 with builtins;
 
 {
+  haskellPackages = super.haskellPackages.override {
+   overrides = _: _: {
+     hweblib = super.haskell.lib.dontCheck super.haskellPackages.hweblib;
+   };
+  };
+
   nix-path = self.haskellPackages.callPackage (
     super.fetchFromGitHub {
       owner = "imsl";
@@ -11,7 +17,12 @@ with builtins;
       sha256 ="1akamqxfiqhg7fr01y62pz3211ycz6lcyz0y5z9qjdn53y10nzag";
     }
   ) {
-    pipes-concurrency = self.haskellPackages.pipes-concurrency_2_0_8;
+    pipes-concurrency =
+      if builtins.hasAttr "pipes-concurrency_2_0_8" self.haskellPackages then
+        self.haskellPackages.pipes-concurrency_2_0_8
+      else
+        self.haskellPackages.pipes-concurrency;
+
     hnix = super.haskell.lib.appendPatch super.haskellPackages.hnix (
       super.fetchurl {
         url = "https://patch-diff.githubusercontent.com/raw/jwiegley/hnix/pull/66.patch";

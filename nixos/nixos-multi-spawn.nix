@@ -141,8 +141,8 @@ in {
         default = import (pkgs.fetchFromGitHub {
           owner = "evidentiae";
           repo = "nixos-multi-spawn";
-          rev = "f626fdbad900b4fde1407aec4a4869dec845d570";
-          sha256 ="19prfgh1nznbfyb96jn7mn58nln54qp8f01hv6zw7bizcb3y85dc";
+          rev = "6f619b7111d96c48d19d10467af4b4b8d3169d03";
+          sha256 ="1yarwi6qipa39hkx8hjq4175bxfiwvycvmammz9y12fydqp0lkl9";
         }) { inherit pkgs; };
       };
 

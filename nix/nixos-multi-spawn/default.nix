@@ -47,6 +47,15 @@ in {
         default = {};
       };
 
+      zone = mkOption {
+        type = with types; nullOr str;
+        default = null;
+        description = ''
+          Network zone name passed to systemd-nspawn (see its --network-zone
+          parameter).  If null, a unique identifier is generated.
+        '';
+      };
+
       configFile = mkOption {
         type = types.package;
       };
@@ -70,7 +79,7 @@ in {
       }) config.resources.nixos.hosts;
 
       configFile = writeText "nms.json" (toJSON {
-        inherit (cfg) tailFiles;
+        inherit (cfg) tailFiles zone;
         machines = mapAttrs (_: m: {
           inherit (m) environment inheritEnvVars nixosSystem;
         }) cfg.machines;

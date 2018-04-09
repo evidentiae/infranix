@@ -27,8 +27,6 @@ let
 
     trap shutdown TERM INT
 
-    zone=$(od -vAn -N4 -tu4 < /dev/urandom | tr -d ' ')
-
     # Read arguments send through the socket by the client
     while read line; do
       case "$line" in
@@ -36,8 +34,16 @@ let
           net=''${line/NET=/}
           ;;
         CONFIG=*)
-          echo "''${line/CONFIG=/}" >> nixos-multi-spawn.json
-          ${cfg.package}/bin/nixos-multi-spawn nixos-multi-spawn.json "$zone" 2>&1 &
+          echo "''${line/CONFIG=/}" >> nixos-multi-spawn0.json
+          if ${pkgs.jq}/bin/jq -e '.zone' nixos-multi-spawn0.json; then
+            zone=$(${pkgs.jq}/bin/jq -r '.zone' nixos-multi-spawn0.json)
+            cp nixos-multi-spawn0.json nixos-multi-spawn.json
+          else
+            zone=$(od -vAn -N4 -tu4 < /dev/urandom | tr -d ' ')
+            ${pkgs.jq}/bin/jq ". + {\"zone\": \"$zone\"}" \
+              nixos-multi-spawn0.json > nixos-multi-spawn.json
+          fi
+          ${cfg.package}/bin/nixos-multi-spawn nixos-multi-spawn.json 2>&1 &
           nms_pid=$!
           break
           ;;
@@ -141,8 +147,8 @@ in {
         default = import (pkgs.fetchFromGitHub {
           owner = "evidentiae";
           repo = "nixos-multi-spawn";
-          rev = "fa24e69b4d264d8777b377119f1a015c04ab66dd";
-          sha256 ="15g8m9gcmlid452anjdrs4fn10b3h6rmzsix5d3mqhipf83k1vfq";
+          rev = "0c72ddeb999a4dcbe315d1a3830bef7cc2f95b4b";
+          sha256 ="0r4fg1szasr016h3c2kyhxnr9whfwwnlqpmmc4n37a80gk5maxkj";
         }) { inherit pkgs; };
       };
 

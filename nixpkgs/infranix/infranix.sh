@@ -19,7 +19,7 @@ while [ "$#" -gt 0 ]; do
     --run)
       if [ "$#" -lt 1 ]; then
         echo >&2 "No command specified"
-	exit 1
+        exit 1
       fi
       cmd="$1"
       shift

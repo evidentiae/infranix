@@ -1,8 +1,9 @@
-{ runCommand, makeWrapper, nix-path }:
+{ runCommand, makeWrapper, nix-path, bash }:
 
 runCommand "infranix" {
   buildInputs = [ makeWrapper ];
   src = ./infranix.sh;
+  propagatedBuildInputs = [ bash ];
 } ''
   mkdir -p $out/bin
   ln -s "$src" $out/bin/infranix

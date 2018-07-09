@@ -55,7 +55,12 @@ in {
   config.cli.commands.build.subCommands = mapAttrs (name: build: {
     binary = writeScript "build-${name}" ''
       #!${stdenv.shell}
-      exec ${nix}/bin/nix-build ${if build.fallback then "--fallback" else ""} \
+      nixbuild="$(type -P nix-build)"
+      if [ -z "$nixbuild" ]; then
+        echo >&2 "nix-build not found in PATH, can't run build"
+        exit 1
+      fi
+      exec "$nixbuild" ${if build.fallback then "--fallback" else ""} \
         '<${build.nixPath.top}/${build.nixPath.sub}>' \
         ${passArgs build.arguments} \
         "$@"

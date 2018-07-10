@@ -35,7 +35,7 @@ let
           ;;
         CONFIG=*)
           echo "''${line/CONFIG=/}" >> nixos-multi-spawn0.json
-          if ${pkgs.jq}/bin/jq -e '.zone' nixos-multi-spawn0.json; then
+          if ${pkgs.jq}/bin/jq -e '.zone' nixos-multi-spawn0.json >/dev/null; then
             zone=$(${pkgs.jq}/bin/jq -r '.zone' nixos-multi-spawn0.json)
             cp nixos-multi-spawn0.json nixos-multi-spawn.json
           else

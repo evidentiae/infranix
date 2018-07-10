@@ -54,6 +54,10 @@ in {
       }) config.resources.nixos.hosts;
     };
 
+    resources.nixos.commonHostImports = [
+      ../addressable.nix
+    ];
+
     resources.nixos.commonNixosImports = singleton {
       networking.useDHCP = false;
       networking.extraHosts = concatStrings (mapAttrsToList (n: host: ''

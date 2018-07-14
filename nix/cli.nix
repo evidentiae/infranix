@@ -49,7 +49,7 @@ let
     };
   };
 
-  mkSub = name: subCommands: writeScriptBin name ''
+  mkSub = name: subCommands: defaultBinary: writeScriptBin name ''
     #!${stdenv.shell}
 
     case "$1" in
@@ -60,8 +60,12 @@ let
         ;;
     '') subCommands)}
     *)
-      echo >&2 "Unknown sub command $1"
-      exit 1
+      ${if defaultBinary == null then ''
+        echo >&2 "Unknown sub command $1"
+        exit 1
+      '' else ''
+        exec "${defaultBinary}" "$@"
+      ''}
       ;;
     esac
   '';
@@ -130,14 +134,25 @@ let
         default = null;
       };
 
+      defaultBinary = mkOption {
+        type = with types; nullOr package;
+        default = null;
+      };
+
       package = mkOption {
         type = types.package;
         default = with config; (
-          if subCommands == {} && steps == {} then
-            throw "The command ${name} has no sub commands or steps defined"
+          if subCommands == {} && steps == {} && defaultBinary == null then
+            throw "The command ${name} has no sub commands, steps or default binary defined"
           else if subCommands != {} && steps != {} then
             throw "The command ${name} has both sub commands and steps defined"
-          else if subCommands != {} then mkSub name subCommands
+          else if steps != {} && defaultBinary != null then
+            throw "The command ${name} has both steps and default binary defined"
+          else if subCommands != {} then mkSub name subCommands defaultBinary
+          else if steps == {} then writeScriptBin name ''
+            #!${stdenv.shell}
+            exec "${defaultBinary}" "$@"
+          ''
           else mkSteps name true config.maxParallelism steps
         );
       };

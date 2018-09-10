@@ -157,7 +157,7 @@ in {
         fi
 
         if [ -a failed ]; then
-          echo >&2 "Build failed"
+          echo >&2 "Build failed. Logs can be found in: $out/logs"
           exit 1
         fi
       '';

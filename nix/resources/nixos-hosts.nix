@@ -1,14 +1,15 @@
-{ config, lib, pkgs, ... }:
+{ paths, config, lib, pkgs, ... }:
 
 with lib;
 
 let
 
+  topConfig = config;
+
   cfg = config.resources.nixos;
 
-  hostOpts = {name, ...}: {
+  hostOpts = { name, config, ... }: {
     imports = cfg.commonHostImports ++ [
-      ../nixos.nix
       ../named.nix
     ];
 
@@ -33,16 +34,58 @@ let
             default = config.ssh.extraArgs;
           };
         };
+        imports = mkOption {
+          type = with types; listOf unspecified;
+          default = [];
+          description = ''
+            A list of NixOS modules defining the configuration of this instance
+          '';
+        };
+        baseImports = mkOption {
+          type = with types; nullOr (listOf path);
+          default = null;
+          description = ''
+            This option overrides the list of module paths that constitute the
+            NixOS "base modules", i.e. the modules from the NixOS distribution
+            that are implicitly imported and merged into all user-defined NixOS
+            modules. An override is typically done to make the list of base
+            modules smaller, to increase performance of evaluating custom NixOS
+            modules.  If this option is set to `null` (the default value), no
+            override is done and the standard list of paths is used (defined in
+            `nixos/modules-list.nix` in the nixpkgs repo).
+          '';
+        };
+        out = mkOption {
+          type = types.unspecified;
+          description = ''
+            The resulting NixOS build
+          '';
+        };
       };
     };
 
     config = {
-      _module.args = { inherit pkgs; };
       inherit name;
-      nixos.imports = cfg.commonNixosImports;
-      nixos.baseImports = cfg.commonBaseImports;
+      nixos = {
+        imports = cfg.commonNixosImports;
+        baseImports = cfg.commonBaseImports;
+        out =
+          let
+            pkgsModule = { lib, ... }: {
+              nixpkgs.pkgs = topConfig.nixpkgs.pkgs;
+            };
+            eval = (import "${pkgs.path}/nixos/lib/eval-config.nix") {
+              specialArgs.paths = paths;
+              baseModules = config.nixos.baseImports ++ [ pkgsModule ];
+              modules = config.nixos.imports;
+            };
+          in {
+            inherit (eval) config options;
+            system = eval.config.system.build.toplevel;
+          };
+        };
+      };
     };
-  };
 
 in {
 

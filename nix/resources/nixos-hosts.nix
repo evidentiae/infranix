@@ -12,7 +12,40 @@ let
       ../named.nix
     ];
 
-    options = {};
+    options = {
+      ssh = {
+        address = mkOption {
+          type = with types; either str path;
+        };
+        command = mkOption {
+          type = types.package;
+          default = pkgs.writeScriptBin "ssh" ''
+            #!${pkgs.stdenv.shell}
+            exec ssh "$@"
+          '';
+        };
+        extraArgs = mkOption {
+          type = with types; listOf str;
+          default = [];
+        };
+      };
+      nixos = {
+        store.ssh = {
+          address = mkOption {
+            type = with types; either str path;
+            default = config.ssh.address;
+          };
+          command = mkOption {
+            type = types.package;
+            default = config.ssh.command;
+          };
+          extraArgs = mkOption {
+            type = with types; listOf str;
+            default = config.ssh.extraArgs;
+          };
+        };
+      };
+    };
 
     config = {
       _module.args = { inherit pkgs; };

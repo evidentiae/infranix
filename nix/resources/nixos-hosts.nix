@@ -17,13 +17,6 @@ let
         address = mkOption {
           type = with types; either str path;
         };
-        command = mkOption {
-          type = types.package;
-          default = pkgs.writeScriptBin "ssh" ''
-            #!${pkgs.stdenv.shell}
-            exec ssh "$@"
-          '';
-        };
         extraArgs = mkOption {
           type = with types; listOf str;
           default = [];
@@ -34,10 +27,6 @@ let
           address = mkOption {
             type = with types; either str path;
             default = config.ssh.address;
-          };
-          command = mkOption {
-            type = types.package;
-            default = config.ssh.command;
           };
           extraArgs = mkOption {
             type = with types; listOf str;

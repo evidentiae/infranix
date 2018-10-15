@@ -144,12 +144,7 @@ in {
 
       package = mkOption {
         type = types.package;
-        default = import (pkgs.fetchFromGitHub {
-          owner = "evidentiae";
-          repo = "nixos-multi-spawn";
-          rev = "0c72ddeb999a4dcbe315d1a3830bef7cc2f95b4b";
-          sha256 ="0r4fg1szasr016h3c2kyhxnr9whfwwnlqpmmc4n37a80gk5maxkj";
-        }) { inherit pkgs; };
+        default = pkgs.nixos-multi-spawn;
       };
 
       allowedGroups = mkOption {

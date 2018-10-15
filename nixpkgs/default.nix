@@ -102,4 +102,12 @@ with builtins;
       ln -s "$script" "$out/bin/$name"
     '';
   };
+
+  nixos-multi-spawn = self.haskellPackages.callPackage (super.fetchFromGitHub {
+    owner = "evidentiae";
+    repo = "nixos-multi-spawn";
+    rev = "d1decff1c85630db2b3baf0247d683d9e5a8c7ef";
+    sha256 ="13806mqf11cpdr1gypn8wwaz4gpyrd6j3lddmcr62hsfp2rarnc8";
+  }) {};
+
 }

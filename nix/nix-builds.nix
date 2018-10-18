@@ -14,35 +14,30 @@ let
       description = mkOption {
         type = types.str;
       };
-      nixPath.top = mkOption {
+      nixExprInput = mkOption {
         type = types.str;
       };
-      nixPath.sub = mkOption {
+      nixExprPath = mkOption {
         type = types.str;
       };
-      fallback = mkOption {
+      paths = mkOption {
+        type = with types; attrsOf str;
+        default = {};
+      };
+      args = mkOption {
+        type = with types; attrsOf str;
+        default = {};
+      };
+      options = mkOption {
+        type = with types; listOf str;
+        default = [];
+      };
+      clearNixPath = mkOption {
         type = types.bool;
         default = true;
       };
-      arguments = mkOption {
-        type = types.attrs;
-        default = {};
-        description = ''
-          Pass arguments to the build definition. If this is used,
-          the build definition should be a function taking the
-          passed arguments as parameters. Note that the parameters
-          are *not* passed if the build is run by Hydra, only when
-          the build is run in the CLI. Because of this, all parameters
-          of the build definition function should have default values.
-          Also note that currently only boolean arguments are supported.
-        '';
-      };
     };
   };
-
-  passArgs = args: concatStringsSep " " (mapAttrsToList (name: value:
-    "--arg ${name} ${if value then "true" else "false"}") args
-  );
 
 in {
   imports = [ ./cli.nix ];
@@ -55,14 +50,25 @@ in {
   config.cli.commands.build.subCommands = mapAttrs (name: build: {
     binary = writeScript "build-${name}" ''
       #!${stdenv.shell}
-      nixbuild="$(type -P nix-build)"
-      if [ -z "$nixbuild" ]; then
-        echo >&2 "nix-build not found in PATH, can't run build"
+      nix="$(type -P nix)"
+      if [ -z "$nix" ]; then
+        echo >&2 "nix not found in PATH, can't run build"
         exit 1
       fi
-      exec "$nixbuild" ${if build.fallback then "--fallback" else ""} \
-        '<${build.nixPath.top}/${build.nixPath.sub}>' \
-        ${passArgs build.arguments} \
+
+      ${optionalString build.clearNixPath "export NIX_PATH="}
+
+      set -x
+
+      exec "$nix" build \
+        -f "<${build.nixExprInput}/${build.nixExprPath}>" \
+        ${concatStringsSep " " build.options} \
+        ${concatStringsSep " " (
+            mapAttrsToList (k: v: "--arg '${k}' '${v}'") build.args
+        )} \
+        ${concatStringsSep " " (
+            mapAttrsToList (k: v: "-I '${k}=${v}'") build.paths
+        )} \
         "$@"
     '';
   }) config.nixBuilds;

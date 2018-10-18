@@ -1,11 +1,11 @@
-{ config, lib, pkgs, ... }:
+{ paths, pathsFile, config, lib, pkgs, ... }:
 
 with lib;
 with pkgs;
 
 let
 
-  buildOpts = { ... }: {
+  buildOpts = { config, ... }: {
     options = {
       enabled = mkOption {
         type = types.bool;
@@ -15,12 +15,12 @@ let
         type = types.str;
       };
       nixExprInput = mkOption {
-        type = types.str;
+        type = types.enum (attrNames paths);
       };
       nixExprPath = mkOption {
         type = types.str;
       };
-      paths = mkOption {
+      nixPath = mkOption {
         type = with types; attrsOf str;
         default = {};
       };
@@ -36,6 +36,14 @@ let
         type = types.bool;
         default = true;
       };
+      inheritedPaths = mkOption {
+        type = with types; listOf (enum (attrNames paths));
+      };
+    };
+    config = {
+      inheritedPaths = [ config.nixExprInput ];
+      args.paths = mkIf (pathsFile != null) (mkDefault pathsFile);
+      nixPath = genAttrs config.inheritedPaths (p: paths.${p});
     };
   };
 
@@ -67,7 +75,7 @@ in {
             mapAttrsToList (k: v: "--arg '${k}' '${v}'") build.args
         )} \
         ${concatStringsSep " " (
-            mapAttrsToList (k: v: "-I '${k}=${v}'") build.paths
+            mapAttrsToList (k: v: "-I '${k}=${v}'") build.nixPath
         )} \
         "$@"
     '';

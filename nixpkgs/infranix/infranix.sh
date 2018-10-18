@@ -42,7 +42,7 @@ export NIX_PATH=""
 nixArgs=(
   --fallback
   -f "$EVAL"
-  --arg paths "import \"$BASE_DIR/paths.nix\""
+  --arg paths "$BASE_DIR/paths.nix"
   --arg configuration "import \"$BASE_DIR\""
   "$@"
 )

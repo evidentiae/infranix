@@ -12,6 +12,9 @@ with (
   } else if t == "path" then {
     pathsFile = toString paths;
     pathAttrs = import paths;
+  } else if t == "set" && paths ? type && paths.type == "derivation" then rec {
+    pathsFile = toString paths;
+    paths = import pathsFile;
   } else if t == "set" then {
     pathsFile = null;
     pathAttrs = paths;

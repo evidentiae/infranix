@@ -14,7 +14,10 @@ with (
     pathAttrs = import paths;
   } else if t == "set" && paths ? type && paths.type == "derivation" then rec {
     pathsFile = toString paths;
-    paths = import pathsFile;
+    pathAttrs = import pathsFile;
+  } else if t == "set" && paths ? outPath then rec {
+    pathsFile = toString paths;
+    pathAttrs = import pathsFile;
   } else if t == "set" then {
     pathsFile = null;
     pathAttrs = paths;

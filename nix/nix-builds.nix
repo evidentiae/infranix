@@ -28,6 +28,10 @@ let
         type = with types; attrsOf str;
         default = {};
       };
+      argStrings = mkOption {
+        type = with types; attrsOf str;
+        default = {};
+      };
       options = mkOption {
         type = with types; listOf str;
         default = [];
@@ -73,6 +77,9 @@ in {
         ${concatStringsSep " " build.options} \
         ${concatStringsSep " " (
             mapAttrsToList (k: v: "--arg '${k}' '${v}'") build.args
+        )} \
+        ${concatStringsSep " " (
+            mapAttrsToList (k: v: "--argstr '${k}' '${v}'") build.argStrings
         )} \
         ${concatStringsSep " " (
             mapAttrsToList (k: v: "-I '${k}=${v}'") build.nixPath

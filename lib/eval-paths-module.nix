@@ -1,5 +1,6 @@
 { paths
 , configuration
+, evaluator ? (x: x)
 }:
 
 with builtins;
@@ -52,7 +53,8 @@ let
     );
   };
 
-  eval = lib.evalModules {
+in evaluator (
+  lib.evalModules {
     specialArgs.paths = pathAttrs';
     specialArgs.pathsFile = pathsFile;
     modules = [
@@ -62,5 +64,4 @@ let
       "${pathAttrs'.nixpkgs}/nixos/modules/misc/nixpkgs.nix"
     ];
   };
-
-in eval
+)

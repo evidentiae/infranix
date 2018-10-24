@@ -63,5 +63,5 @@ in evaluator (
       # We reuse this module from NixOS to be able to set nixpkgs modularily
       "${pathAttrs'.nixpkgs}/nixos/modules/misc/nixpkgs.nix"
     ];
-  };
+  }
 )

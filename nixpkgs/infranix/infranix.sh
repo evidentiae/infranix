@@ -64,7 +64,7 @@ if [ -z "$cmd" ]; then
   nix-build --fallback --out-link "$link" --drv-link "$link.drv" \
     -E "$evalDefault" -A config.cli.build.bashrc "$@"
   if [ -a "$link" ]; then
-    RELOADER_PID=$$ SHELL_RC="$link" $SHELL --rcfile "$link" -i
+    RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i
   else
     echo >&2 "Build failed"
     exit 1

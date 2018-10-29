@@ -36,18 +36,27 @@ let
     in {
       inherit name;
       value =
-        if t == "string" then p
-        else if t == "path" then toString p
-        else if t == "set" && p ? url then toString (fetchGit p)
+        if t == "string" then
+          { path = p; pathRef = p; }
+        else if t == "path" then
+          let p' = toString p; in {
+            path = p';
+            pathRef = p';
+          }
+        else if t == "set" && p ? url then
+          let p' = fetchGit p; in {
+            path = toString p';
+            pathRef = p // { inherit (p') rev; };
+          }
         else throw "path attribute ${name} has an unsupported type";
     };
 
-  lib = import "${pathAttrs'.nixpkgs}/lib";
+  lib = import "${pathAttrs'.nixpkgs.path}/lib";
 
   pkgsModule = { lib, config, ... }: {
     nixpkgs.system = lib.mkDefault currentSystem;
     nixpkgs.pkgs = lib.mkDefault (
-      import pathAttrs'.nixpkgs {
+      import pathAttrs'.nixpkgs.path {
         inherit (config.nixpkgs) config overlays localSystem crossSystem;
       }
     );
@@ -55,13 +64,14 @@ let
 
 in evaluator (
   lib.evalModules {
-    specialArgs.paths = pathAttrs';
+    specialArgs.paths = lib.mapAttrs (_: p: p.path) pathAttrs';
+    specialArgs.pathRefs = lib.mapAttrs (_: p: p.pathRef) pathAttrs';
     specialArgs.pathsFile = pathsFile;
     modules = [
       configuration
       pkgsModule
       # We reuse this module from NixOS to be able to set nixpkgs modularily
-      "${pathAttrs'.nixpkgs}/nixos/modules/misc/nixpkgs.nix"
+      "${pathAttrs'.nixpkgs.path}/nixos/modules/misc/nixpkgs.nix"
     ];
   }
 )

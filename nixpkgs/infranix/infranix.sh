@@ -42,6 +42,7 @@ export NIX_PATH=""
 nixArgs=(
   --fallback
   -f "$EVAL"
+  --option tarball-ttl 0
   --arg paths "$BASE_DIR/paths.nix"
   --arg configuration "import \"$BASE_DIR\""
   "$@"

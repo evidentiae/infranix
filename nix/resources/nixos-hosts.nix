@@ -74,11 +74,12 @@ let
             pkgsModule = { lib, ... }: {
               nixpkgs.pkgs = topConfig.nixpkgs.pkgs;
             };
-            eval = (import "${pkgs.path}/nixos/lib/eval-config.nix") {
+            eval = (import "${pkgs.path}/nixos/lib/eval-config.nix") ({
               specialArgs.paths = paths;
-              baseModules = config.nixos.baseImports ++ [ pkgsModule ];
-              modules = config.nixos.imports;
-            };
+              modules = config.nixos.imports ++ [ pkgsModule ];
+            } // optionalAttrs (config.nixos.baseImports != null) {
+              baseModules = config.nixos.baseImports;
+            });
           in {
             inherit (eval) config options;
             system = eval.config.system.build.toplevel;

@@ -70,8 +70,6 @@ in {
 
       ${optionalString build.clearNixPath "export NIX_PATH="}
 
-      set -x
-
       exec "$nix" build \
         -f "<${build.nixExprInput}/${build.nixExprPath}>" \
         ${concatStringsSep " " build.options} \

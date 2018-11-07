@@ -54,8 +54,8 @@ with builtins;
   nixos-multi-spawn = self.haskellPackages.callPackage (super.fetchFromGitHub {
     owner = "evidentiae";
     repo = "nixos-multi-spawn";
-    rev = "d1decff1c85630db2b3baf0247d683d9e5a8c7ef";
-    sha256 ="13806mqf11cpdr1gypn8wwaz4gpyrd6j3lddmcr62hsfp2rarnc8";
+    rev = "09388f0555e76d418a798bc4a53fc84fdf0cd6ac";
+    sha256 ="19q0w9zy9nlw5m21r1ksqg6fzlmxzwyjyw26k33x0q1ba465jc0s";
   }) {};
 
 }

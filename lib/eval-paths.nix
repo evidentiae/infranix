@@ -31,13 +31,8 @@ let
     in {
       inherit name;
       value =
-        if t == "string" then
+        if t == "string" || t == "path" then
           { path = p; pathRef = p; }
-        else if t == "path" then
-          let p' = toString p; in {
-            path = p';
-            pathRef = p';
-          }
         else if t == "set" && p ? url then
           let p' = fetchGit p; in {
             path = toString p';

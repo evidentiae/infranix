@@ -1,4 +1,4 @@
-{ paths, pathsFile, config, lib, pkgs, ... }:
+{ paths, config, lib, pkgs, ... }:
 
 with lib;
 with pkgs;
@@ -46,7 +46,7 @@ let
     };
     config = {
       inheritedPaths = [ config.nixExprInput ];
-      args.paths = mkIf (pathsFile != null) (mkDefault pathsFile);
+      args.paths = mkIf (paths._pathsFile != null) (mkDefault paths._pathsFile);
       nixPath = genAttrs config.inheritedPaths (p: paths.${p});
     };
   };

@@ -4,6 +4,7 @@ set -eu
 set -o pipefail
 
 origArgs=("$@")
+cmd=""
 cmdArgs=()
 bootstrap=1
 BASE_DIR="$(readlink -m .)"

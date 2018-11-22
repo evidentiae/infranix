@@ -4,6 +4,7 @@ set -eu
 set -o pipefail
 
 origArgs=("$@")
+cmdArgs=()
 bootstrap=1
 BASE_DIR="$(readlink -m .)"
 
@@ -17,11 +18,24 @@ while [ "$#" -gt 0 ]; do
     --no-bootstrap)
       bootstrap=""
       ;;
+    --run)
+      if [ "$#" -lt 1 ]; then
+        echo >&2 "No command specified"
+        exit 1
+      fi
+      cmd="$1"
+      shift
+      ;;
     --)
       break
       ;;
     *)
-      echo >&2 "Unknown infranix option $x"
+      if [ -z "$cmd" ]; then
+        echo >&2 "Unknown infranix option $x"
+        exit 1
+      else
+        cmdArgs+=("$x")
+      fi
       ;;
   esac
 done
@@ -57,7 +71,12 @@ fi
 
 nix build -o "$link" "${nixArgs[@]}" config.cli.build.bashrc
 if [ -a "$link" ]; then
-  RELOADER_PID=$$ SHELL_RC="$link" $SHELL --rcfile "$link" -i
+  if [ -z "$cmd" ]; then
+    RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i
+  else
+    RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i \
+      -c "$cmd"' "$@"' bash "${cmdArgs[@]}"
+  fi
 else
   echo >&2 "Build failed"
   exit 1

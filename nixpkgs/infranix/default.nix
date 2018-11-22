@@ -1,4 +1,4 @@
-{ runCommand, makeWrapper }:
+{ runCommand, makeWrapper, bashInteractive }:
 
 runCommand "infranix" {
   buildInputs = [ makeWrapper ];
@@ -7,5 +7,7 @@ runCommand "infranix" {
 } ''
   mkdir -p $out/bin
   ln -s "$src" $out/bin/infranix
-  wrapProgram $out/bin/infranix --set EVAL "$EVAL"
+  wrapProgram $out/bin/infranix \
+    --set EVAL "$EVAL" \
+    --prefix PATH : ${bashInteractive}/bin
 ''

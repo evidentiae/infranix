@@ -6,6 +6,7 @@ set -o pipefail
 origArgs=("$@")
 cmd=""
 cmdArgs=()
+nixArgs=()
 bootstrap=1
 BASE_DIR="$(readlink -m .)"
 
@@ -27,13 +28,9 @@ while [ "$#" -gt 0 ]; do
       cmd="$1"
       shift
       ;;
-    --)
-      break
-      ;;
     *)
       if [ -z "$cmd" ]; then
-        echo >&2 "Unknown infranix option $x"
-        exit 1
+        nixArgs+=("$x")
       else
         cmdArgs+=("$x")
       fi
@@ -54,7 +51,7 @@ pathsfile="$BASE_DIR/paths.nix"
 
 export NIX_PATH=""
 
-nixArgs=(
+nixArgs+=(
   --fallback
   -f "$EVAL"
   --option tarball-ttl 0

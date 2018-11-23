@@ -5,6 +5,7 @@ set -o pipefail
 
 origArgs=("$@")
 cmd=""
+cmdstr=""
 cmdArgs=()
 nixArgs=()
 bootstrap=1
@@ -20,16 +21,30 @@ while [ "$#" -gt 0 ]; do
     --no-bootstrap)
       bootstrap=""
       ;;
+    -c)
+      if [ "$#" -lt 1 ]; then
+        echo >&2 "No command specified"
+        exit 1
+      elif [ -n "$cmd" ]; then
+        echo >&2 "Options -c and --run can't be combined"
+        exit 1
+      fi
+      cmdstr="$1"
+      shift
+      ;;
     --run)
       if [ "$#" -lt 1 ]; then
         echo >&2 "No command specified"
+        exit 1
+      elif [ -n "$cmdstr" ]; then
+        echo >&2 "Options -c and --run can't be combined"
         exit 1
       fi
       cmd="$1"
       shift
       ;;
     *)
-      if [ -z "$cmd" ]; then
+      if [ -z "$cmd" ] && [ -z "$cmdstr" ]; then
         nixArgs+=("$x")
       else
         cmdArgs+=("$x")
@@ -67,17 +82,27 @@ if [ -n "$bootstrap" ]; then
   fi
 fi
 
-nix build -o "$link" "${nixArgs[@]}" config.cli.build.bashrc
-if [ -a "$link" ]; then
-  if [ -z "$cmd" ]; then
-    RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i
+if [ -n "$cmd" ]; then
+  nix build -o "$link" "${nixArgs[@]}" config.cli.commands."$cmd".package
+  if [ -x "$link/bin/$cmd" ]; then
+    exec "$link/bin/$cmd" "${cmdArgs[@]}"
   else
-    RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i \
-      -c "$cmd"' "$@"' bash "${cmdArgs[@]}"
+    echo >&2 "Build failed"
+    exit 1
   fi
 else
-  echo >&2 "Build failed"
-  exit 1
+  nix build -o "$link" "${nixArgs[@]}" config.cli.build.bashrc
+  if [ -a "$link" ]; then
+    if [ -z "$cmdstr" ]; then
+      RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i
+    else
+      RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i \
+        -c "$cmdstr"' "$@"' bash "${cmdArgs[@]}"
+    fi
+  else
+    echo >&2 "Build failed"
+    exit 1
+  fi
 fi
 
 popd &>/dev/null

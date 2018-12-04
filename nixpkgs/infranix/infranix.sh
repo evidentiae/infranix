@@ -9,13 +9,23 @@ cmdstr=""
 cmdArgs=()
 nixArgs=()
 bootstrap=1
-BASE_DIR="$(readlink -m .)"
+pathsfile=""
+configuration=""
+BASE_DIR=""
 
 while [ "$#" -gt 0 ]; do
   x="$1"; shift 1
   case "$x" in
     -d)
       BASE_DIR="$(readlink -m "$1")"
+      shift
+      ;;
+    -f)
+      configuration="$(readlink -m "$1")"
+      shift
+      ;;
+    -p)
+      pathsfile="$(readlink -m "$1")"
       shift
       ;;
     --no-bootstrap)
@@ -53,25 +63,52 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-export BASE_DIR
-pushd "$BASE_DIR" &>/dev/null
+if [ -z "$configuration" ]; then
+  configuration="$(readlink -m ./default.nix)"
+  origArgs+=(-f "$configuration")
+fi
+if ! [ -r "$configuration" ]; then
+  echo >&2 "Can't read shell configuration $configuration"
+  exit 1
+fi
 
-trap 'echo >&2 "Reloading shell..."; exec "$0" -d "$BASE_DIR" "${origArgs[@]}"' SIGHUP
+if [ -z "$pathsfile" ]; then
+  pathsfile="$(readlink -m ./paths.nix)"
+  origArgs+=(-p "$pathsfile")
+fi
+if ! [ -f "$pathsfile" ]; then
+  echo >&2 "Can't find paths file $pathsfile"
+  exit 1
+fi
+
+if [ -z "$BASE_DIR" ]; then
+  if [ -d "$configuration" ]; then
+    BASE_DIR="$configuration"
+  else
+    BASE_DIR="$(dirname "$configuration")"
+  fi
+  origArgs+=(-d "$BASE_DIR")
+fi
+if ! [ -d "$BASE_DIR" ]; then
+  echo >&2 "Base directory is not a valid directory"
+  exit 1
+fi
+
+trap 'echo >&2 "Reloading shell..."; exec "$0" "${origArgs[@]}"' SIGHUP
 
 cacheDir="${HOME}/.cache/infranix/drvs"
 mkdir -p "$cacheDir"
 link="$(readlink -m "$cacheDir/shell-$(date +%s%N)")"
 
-pathsfile="$BASE_DIR/paths.nix"
-
+export BASE_DIR
 export NIX_PATH=""
 
 nixArgs+=(
   --fallback
   -f "$EVAL"
   --option tarball-ttl 0
-  --arg paths "$BASE_DIR/paths.nix"
-  --arg configuration "import \"$BASE_DIR\""
+  --arg paths "$pathsfile"
+  --arg configuration "import \"$configuration\""
   "$@"
 )
 

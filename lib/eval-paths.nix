@@ -53,7 +53,8 @@ let
         inherit name;
         value = pathAttrs'.${name}.pathRef;
       }) pathNames);
-      _pathsFile = pathsFile;
+      _file = pathsFile;
+      _pathsFile = pathsFile; # deprecated
     };
 
 in paths'

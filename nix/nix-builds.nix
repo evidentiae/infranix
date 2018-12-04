@@ -46,7 +46,7 @@ let
     };
     config = {
       inheritedPaths = [ config.nixExprInput ];
-      args.paths = mkIf (paths._pathsFile != null) (mkDefault paths._pathsFile);
+      args.paths = mkIf (paths._file != null) (mkDefault paths._file);
       nixPath = genAttrs config.inheritedPaths (p: "${toString paths.${p}}");
     };
   };

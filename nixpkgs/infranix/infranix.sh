@@ -12,6 +12,7 @@ bootstrap=1
 pathsfile=""
 configuration=""
 BASE_DIR=""
+timed=""
 
 while [ "$#" -gt 0 ]; do
   x="$1"; shift 1
@@ -41,6 +42,9 @@ while [ "$#" -gt 0 ]; do
       fi
       cmdstr="$1"
       shift
+      ;;
+    --time)
+      timed=1
       ;;
     --run)
       if [ "$#" -lt 1 ]; then
@@ -113,14 +117,22 @@ nixArgs+=(
 )
 
 if [ -n "$bootstrap" ]; then
-  nix build -o "$link-bootstrap" "${nixArgs[@]}" config.cli.build.bootstrapScript
+  if [ -n "$timed" ]; then
+    TIME='+ build bootstrap %es' time nix build -o "$link-bootstrap" "${nixArgs[@]}" config.cli.build.bootstrapScript
+  else
+    nix build -o "$link-bootstrap" "${nixArgs[@]}" config.cli.build.bootstrapScript
+  fi
   if [ -x "$link-bootstrap" ]; then
     "$link-bootstrap"
   fi
 fi
 
 if [ -n "$cmd" ]; then
-  nix build -o "$link" "${nixArgs[@]}" config.cli.commands."$cmd".package
+  if [ -n "$timed" ]; then
+    TIME='+ build command %es' time nix build -o "$link" "${nixArgs[@]}" config.cli.commands."$cmd".package
+  else
+    nix build -o "$link" "${nixArgs[@]}" config.cli.commands."$cmd".package
+  fi
   if [ -x "$link/bin/$cmd" ]; then
     exec "$link/bin/$cmd" "${cmdArgs[@]}"
   else
@@ -128,7 +140,11 @@ if [ -n "$cmd" ]; then
     exit 1
   fi
 else
-  nix build -o "$link" "${nixArgs[@]}" config.cli.build.bashrc
+  if [ -n "$timed" ]; then
+    TIME='+ build shell %es' time nix build -o "$link" "${nixArgs[@]}" config.cli.build.bashrc
+  else
+    nix build -o "$link" "${nixArgs[@]}" config.cli.build.bashrc
+  fi
   if [ -a "$link" ]; then
     if [ -z "$cmdstr" ]; then
       RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i

@@ -147,9 +147,9 @@ else
   fi
   if [ -a "$link" ]; then
     if [ -z "$cmdstr" ]; then
-      RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i
+      RELOADER_PID=$$ SHELL_RC="$(readlink "$link")" bash --rcfile "$link" -i
     else
-      RELOADER_PID=$$ SHELL_RC="$link" bash --rcfile "$link" -i \
+      RELOADER_PID=$$ SHELL_RC="$(readlink "$link")" bash --rcfile "$link" -i \
         -c "$cmdstr"' "$@"' bash "${cmdArgs[@]}"
     fi
   else

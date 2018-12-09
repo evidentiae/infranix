@@ -1,0 +1,10 @@
+#!/bin/sh
+
+export NIX_PATHS_FILE="$(readlink -m "$(pwd)/paths.nix")"
+
+# Use eval to get rid of double quotes in nix string
+nixpkgs="$(eval echo "$(nix-instantiate --eval -A nixpkgs -E 'import @lib@/eval-paths.nix "'"$NIX_PATHS_FILE"'"')")"
+
+export NIX_PATH="nixpkgs/nixos=@lib@/eval-nixos-with-paths.nix:nixpkgs=$nixpkgs"
+
+exec nixos-rebuild "$@"

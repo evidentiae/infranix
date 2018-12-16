@@ -3,11 +3,11 @@
 runCommand "infranix" {
   buildInputs = [ makeWrapper ];
   src = ./infranix.sh;
-  EVAL = ../../lib/eval-paths-module.nix;
+  INFRANIX_LIB = ../../lib;
 } ''
   mkdir -p $out/bin
   ln -s "$src" $out/bin/infranix
   wrapProgram $out/bin/infranix \
-    --set EVAL "$EVAL" \
+    --set INFRANIX_LIB "$INFRANIX_LIB" \
     --prefix PATH : ${bashInteractive}/bin
 ''

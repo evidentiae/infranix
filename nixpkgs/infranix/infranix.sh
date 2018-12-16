@@ -109,7 +109,7 @@ export NIX_PATH=""
 
 nixArgs+=(
   --fallback
-  -f "$EVAL"
+  -f "$INFRANIX_LIB/eval-paths-module.nix"
   --option tarball-ttl 0
   --arg paths "$pathsfile"
   --arg configuration "import \"$configuration\""

@@ -66,4 +66,53 @@ with builtins;
     sha256 ="19q0w9zy9nlw5m21r1ksqg6fzlmxzwyjyw26k33x0q1ba465jc0s";
   }) {};
 
+  nixos-multi-spawn-client = super.writeScriptBin "nixos-multi-spawn-client" ''
+    #!${self.stdenv.shell}
+    set -e
+    set -o pipefail
+
+    config="$1"
+    net="$2"
+    socat=${self.socat}/bin/socat
+    socket="/run/nixos-multi-spawn/$(id -gn).socket"
+
+    if ! [ -w "$socket" ]; then
+      echo >&2 "Socket '$socket' not writable"
+      exit 1
+    fi
+
+    if ! [ -r "$config" ]; then
+      echo >&2 "Config '$config' not readable"
+      exit 1
+    fi
+
+    if [ -z "$net" ] || ! [[ "$net" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+      echo >&2 "Invalid net '$net'"
+      exit 1
+    fi
+
+    function printargs() {
+      echo -e "\n$1"
+      test -n "$net" && echo -e "\nNET=$net"
+      echo "CONFIG=$(${self.jq}/bin/jq -cr . "$config")"
+    }
+
+    function notify_ready() {
+      if [ -n "$NOTIFY_SOCKET" ]; then
+        echo "READY=1" | $socat UNIX-SENDTO:$NOTIFY_SOCKET STDIO
+      fi
+    }
+
+    printargs | $socat -,ignoreeof UNIX-CONNECT:"$socket" | (
+      notify_ready
+      while read line; do
+        if [ "$line" == "DONE" ]; then
+          ${self.gnutar}/bin/tar xBf -
+        else
+          echo "$line"
+        fi
+      done
+    )
+  '';
+
 }

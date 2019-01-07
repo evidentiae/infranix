@@ -124,10 +124,15 @@ in {
 
       phases = [ "buildPhase" ];
 
+      buildInputs = [
+        nixos-multi-spawn-client
+        gnused
+      ];
+
       inherit (config.testing) succeedOnFailure;
 
       buildPhase = ''
-        /run/current-system/sw/bin/nixos-multi-spawn-client \
+        nixos-multi-spawn-client \
           ${config.nixos-multi-spawn.configFile} 10.42.0.0/16 || true
 
         result=fs/driver/out
@@ -152,8 +157,7 @@ in {
         fi
 
         if [ -a "$out/nix-support/hydra-build-products" ]; then
-          ${gnused}/bin/sed -i "s,@out@,$out,g" \
-            "$out/nix-support/hydra-build-products"
+          sed -i "s,@out@,$out,g" "$out/nix-support/hydra-build-products"
         fi
 
         if [ -a failed ]; then

@@ -84,55 +84,6 @@ let
     fi
   '';
 
-  client = pkgs.writeScriptBin "nixos-multi-spawn-client" ''
-    #!${pkgs.stdenv.shell}
-    set -e
-    set -o pipefail
-
-    config="$1"
-    net="$2"
-    socat=${pkgs.socat}/bin/socat
-    socket="/run/nixos-multi-spawn/$(id -gn).socket"
-
-    if ! [ -w "$socket" ]; then
-      echo >&2 "Socket '$socket' not writable"
-      exit 1
-    fi
-
-    if ! [ -r "$config" ]; then
-      echo >&2 "Config '$config' not readable"
-      exit 1
-    fi
-
-    if [ -z "$net" ] || ! [[ "$net" =~ ${netRegex} ]]; then
-      echo >&2 "Invalid net '$net'"
-      exit 1
-    fi
-
-    function printargs() {
-      echo -e "\n$1"
-      test -n "$net" && echo -e "\nNET=$net"
-      echo "CONFIG=$(${pkgs.jq}/bin/jq -cr . "$config")"
-    }
-
-    function notify_ready() {
-      if [ -n "$NOTIFY_SOCKET" ]; then
-        echo "READY=1" | $socat UNIX-SENDTO:$NOTIFY_SOCKET STDIO
-      fi
-    }
-
-    printargs | $socat -,ignoreeof UNIX-CONNECT:"$socket" | (
-      notify_ready
-      while read line; do
-        if [ "$line" == "DONE" ]; then
-          ${pkgs.gnutar}/bin/tar xBf -
-        else
-          echo "$line"
-        fi
-      done
-    )
-  '';
-
 in {
 
   options = {
@@ -162,11 +113,10 @@ in {
 
   config = mkIf cfg.enable {
 
-    environment.systemPackages = [ client ];
+    environment.systemPackages = [ pkgs.nixos-multi-spawn-client ];
 
     nix.sandboxPaths = mkIf cfg.allowNix [
       "/run/nixos-multi-spawn/nixbld.socket"
-      "/run/current-system/sw/bin/nixos-multi-spawn-client"
     ];
 
     systemd.sockets = mkMerge (map (group: {

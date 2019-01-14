@@ -18,7 +18,7 @@ let
       echo "copying dummy secret ${secret.dummyContents} to ${path}"
       cat "${secret.dummyContents}" > "${path}"
     '' else ''
-      ${cfg.decrypter} "${secret.encryptedPath}" > "${path}"
+      ${cfg.decrypter} "${toFile "secret" secret.encryptedContents}" > "${path}"
     ''}
   '';
 
@@ -60,8 +60,8 @@ let
         type = with types; attrsOf (submodule (secretSvcOpts name config));
         default = {};
       };
-      encryptedPath = mkOption {
-        type = types.path;
+      encryptedContents = mkOption {
+        type = types.str;
       };
       dummyContents = mkOption {
         type = types.path;

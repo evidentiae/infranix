@@ -14,6 +14,12 @@ let
     "10.42.${genByte name 0}.${genByte name 3}"
   ) config.resources.nixos.hosts;
 
+  logMsg =
+    if config.testing.succeedOnFailure then
+      "Logs can be found in: $out/logs"
+    else
+      "";
+
 in {
   imports = [
     ../testing.nix
@@ -161,7 +167,7 @@ in {
         fi
 
         if [ -a failed ]; then
-          echo >&2 "Build failed. Logs can be found in: $out/logs"
+          echo >&2 "Build failed. ${logMsg}"
           exit 1
         fi
       '';

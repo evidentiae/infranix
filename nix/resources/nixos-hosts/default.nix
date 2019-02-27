@@ -11,7 +11,7 @@ let
 
   hostOpts = { name, config, ... }: {
     imports = cfg.commonHostImports ++ [
-      ../named.nix
+      ../../named.nix
     ];
 
     options = {
@@ -94,7 +94,8 @@ let
 in {
 
   imports = [
-    ../cli.nix
+    ../../cli.nix
+    ./deploy.nix
   ];
 
   options = {

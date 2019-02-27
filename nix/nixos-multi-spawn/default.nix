@@ -26,7 +26,7 @@ let
 
 in {
   imports = [
-    ../resources/nixos-hosts.nix
+    ../resources/nixos-hosts
     ../named.nix
   ];
 

@@ -128,7 +128,7 @@ in {
 
   config = {
 
-    cli.commands.server.subCommands.info.binary = mkDefault (writeScript "server-info" ''
+    cli.commands.server.subCommands.info.binary = writeScript "server-info" ''
       #!${stdenv.shell}
 
       if [ "$#" -lt 2 ]; then
@@ -160,7 +160,7 @@ in {
         exit 1
         ;;
       esac
-    '');
+    '';
 
     cli.commands.server.subCommands.shell.binary = writeScript "server-shell" ''
       #!${stdenv.shell}

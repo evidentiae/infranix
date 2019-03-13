@@ -75,7 +75,7 @@ let
         out =
           let
             pkgsModule = { lib, ... }: {
-              nixpkgs.pkgs = topConfig.nixpkgs.pkgs;
+              nixpkgs.pkgs = pkgs;
             };
             eval = (import (paths.nixpkgs + "/nixos/lib/eval-config.nix")) ({
               specialArgs.paths = paths;

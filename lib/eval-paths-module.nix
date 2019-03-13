@@ -10,7 +10,7 @@ let
     nixpkgs.system = lib.mkDefault builtins.currentSystem;
     nixpkgs.pkgs = lib.mkDefault (
       import paths.nixpkgs {
-        inherit (config.nixpkgs) config overlays localSystem crossSystem;
+        inherit (config.nixpkgs) config localSystem crossSystem;
       }
     );
   };

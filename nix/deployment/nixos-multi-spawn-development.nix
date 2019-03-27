@@ -4,22 +4,13 @@ with lib;
 with pkgs;
 with builtins;
 
-with import ../../lib/integer.nix;
-with import ../../lib/ipv4.nix;
-
 let
 
-  
-  inherit (config.resources.nixos) hosts;
   inherit (config) name;
+  inherit (config.nixosHosts) hosts;
+  inherit (config.nixosHosts.networking.dns) hostsDir;
 
-  cfg = config.nixos-multi-nspawn;
-
-  inherit (splitCIDR cfg.networking.network) network prefix;
-
-  ipMap = mapAttrs (h: _:
-    ipAddressOfHost network prefix (1 + random (name+h) (hostCount prefix - 1))
-  ) hosts;
+  cfg = config.nixos-multi-spawn;
 
   serviceDef = writeTextDir "${name}.service" ''
     [Service]
@@ -28,35 +19,33 @@ let
     PrivateTmp=true
     Type=notify
     NotifyAccess=all
-    ExecStart=${writeScriptBin "nixos-multi-spawn-client" ''
+    ExecStart=${writeScript "nixos-multi-spawn-client" ''
       #!${stdenv.shell}
       cd /tmp
-      exec /run/current-system/sw/bin/nixos-multi-spawn-client \
-        ${config.nixos-multi-spawn.configFile} ${cfg.networking.network}
-    ''}/bin/nixos-multi-spawn-client
+      exec ${nixos-multi-spawn-client}/bin/nixos-multi-spawn-client \
+        ${cfg.configFile} ${config.nixosHosts.networking.network}
+    ''}
   '';
 
   dnsmasqHostsFile = writeText "hosts" (concatStrings (
     mapAttrsToList (name: host: concatMapStrings (addr: ''
-      ${ipMap.${name}} ${addr}
+      ${host.ssh.address} ${addr}
     '') host.addresses.external) hosts
   ));
 
 in {
 
   imports = [
-    ./default.nix
-    ../resources/nixos-hosts
+    ../named.nix
+    ../nixos-multi-spawn.nix
     ../cli.nix
+    ./nixos-hosts.nix
   ];
 
   options = {
-    resources.nixos.hosts = mkOption {
+    nixosHosts.hosts = mkOption {
       type = with types; attrsOf (submodule ({name, ...}: {
         config = {
-          addresses.internal = [ name ];
-          nixos.store.ssh.address = "localhost";
-          ssh.address = ipMap.${name};
           ssh.extraArgs = [
             "-q"
             "-o PreferredAuthentications=password"
@@ -67,48 +56,18 @@ in {
       }));
     };
 
-    nixos-multi-nspawn.networking = {
-      dns.hostsDir = mkOption {
-        type = with types; nullOr path;
-        description = ''
-          The path to writeable directory where NetworkManager checks for new
-          hosts files.
-        '';
-      };
-  
-      network = mkOption {
-        type = types.str;
-        default = "10.10.10.0/24";
-        description = ''
-          The network (in CIDR format) used for the systemd-nspawn containers.
-        '';
-      };
+    nixosHosts.networking.dns.hostsDir = mkOption {
+      type = with types; nullOr path;
+      description = ''
+        The path to writeable directory where NetworkManager checks for new
+        hosts files.
+      '';
     };
   };
 
   config = {
-
-    nixos-multi-spawn = {
-      machines = mapAttrs (name: host: {
-        environment.IP = "${ipMap.${name}}/16";
-      }) hosts;
-    };
-
-    resources.nixos.commonHostImports = [
-      ../addressable.nix
-    ];
-
-    resources.nixos.commonNixosImports = singleton ({config,...}: {
-      networking = {
-        useDHCP = false;
-        defaultGateway = minHostAddress network prefix;
-        hosts = mapAttrs' (h: ip:
-          nameValuePair ip hosts.${h}.addresses.internal
-        ) ipMap;
-      };
-
+    nixosHosts.commonNixosImports = singleton ({config,...}: {
       users.users.root.password = mkForce "";
-
       services.openssh = {
         enable = true;
         permitRootLogin = mkForce "yes";
@@ -118,30 +77,6 @@ in {
           AuthenticationMethods none
         '';
       };
-
-      # Disable remount for specialfs
-      # For some reason, remounts seems to be forbidden for
-      # some special filesystems when systemd-nspawn runs with private user
-      # namespace. Needs to investigate if this can be fixed in upstream
-      # nixpkgs. The script below is copied from nixpkgs and changed slightly
-      # (return 0 when fs is already mounted)
-      system.activationScripts.specialfs = mkForce ''
-        specialMount() {
-          local device="$1"
-          local mountPoint="$2"
-          local options="$3"
-          local fsType="$4"
-          local allowRemount="$5"
-
-          if mountpoint -q "$mountPoint"; then
-            return 0
-          else
-            mkdir -m 0755 -p "$mountPoint"
-          fi
-          mount -t "$fsType" -o "$options" "$device" "$mountPoint"
-        }
-        source ${config.system.build.earlyMountScript}
-      '';
     });
 
     cli.commands.provision.steps = {
@@ -163,10 +98,10 @@ in {
           fi
         '';
       };
-      dns = mkIf (cfg.networking.dns.hostsDir != null) {
+      dns = mkIf (hostsDir != null) {
         binary = writeScript "deploy-dns" ''
           #!${stdenv.shell}
-          d="${cfg.networking.dns.hostsDir}"
+          d="${hostsDir}"
           if [ -w "$d" ] || [ -w "$(dirname "$d")" ]; then
             echo >&2 "Configuring DNS in $d"
             mkdir -p "$d"
@@ -190,10 +125,10 @@ in {
             "${name}.service" 2>/dev/null || true
         '';
       };
-      dns = mkIf (cfg.networking.dns.hostsDir != null) {
+      dns = mkIf (hostsDir != null) {
         binary = writeScript "destroy-dns" ''
           #!${stdenv.shell}
-          d="${cfg.networking.dns.hostsDir}"
+          d="${hostsDir}"
           if [ -w "$d/${name}" ]; then
             truncate -s 0 -c "$d/${name}"
             rm -f "$d/${name}"
@@ -201,6 +136,5 @@ in {
         '';
       };
     };
-
   };
 }

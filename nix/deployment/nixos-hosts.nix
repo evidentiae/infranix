@@ -5,7 +5,7 @@ with pkgs;
 
 let
 
-  hosts = config.resources.nixos.hosts;
+  inherit (config.nixosHosts) hosts;
 
   activationScript = name: host: writeScript "activate-${name}" ''
     #!${stdenv.shell}
@@ -78,7 +78,7 @@ let
 in {
 
   imports = [
-    ../../cli.nix
+    ../cli.nix
   ];
 
   cli.commands = {

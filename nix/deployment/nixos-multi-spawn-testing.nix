@@ -6,13 +6,7 @@ with builtins;
 
 let
 
-  inherit (import ../../lib.nix) genByte;
-
   cfg = config.testing.nixos-multi-spawn;
-
-  ipMap = mapAttrs (name: _:
-    "10.42.${genByte name 0}.${genByte name 3}"
-  ) config.resources.nixos.hosts;
 
   logMsg =
     if config.testing.succeedOnFailure then
@@ -22,58 +16,24 @@ let
 
 in {
   imports = [
+    ../named.nix
+    ../nixos-multi-spawn.nix
     ../testing.nix
-    ./default.nix
   ];
-
-  options = {
-    resources.nixos.hosts = mkOption {
-      type = with types; attrsOf (submodule ({name, ...}: {
-        config = {
-          addresses.external = [ name ];
-          addresses.internal = [ name ];
-          nixos.imports = singleton {
-            networking.hostName = name;
-          };
-        };
-      }));
-    };
-
-    testing.nixos-multi-spawn = {
-      tailFiles = mkOption {
-        type = with types; listOf str;
-        default = [
-          "fs/driver/out/logs/script-main.stdout"
-          "fs/driver/out/logs/script-main.stderr"
-          "fs/driver/out/logs/script-validation.stdout"
-          "fs/driver/out/logs/script-validation.stderr"
-        ];
-      };
-    };
-  };
 
   config = {
     nixos-multi-spawn = {
-      inherit (cfg) tailFiles;
-      machines = mapAttrs (name: host: {
-        environment.IP = "${ipMap.${name}}/16";
-      }) config.resources.nixos.hosts;
+      tailFiles = [
+        "fs/driver/out/logs/script-main.stdout"
+        "fs/driver/out/logs/script-main.stderr"
+        "fs/driver/out/logs/script-validation.stdout"
+        "fs/driver/out/logs/script-validation.stderr"
+      ];
     };
 
-    resources.nixos.commonHostImports = [
-      ../addressable.nix
-    ];
+    nixosHosts.networking.network = "10.42.0.0/16";
 
-    resources.nixos.commonNixosImports = singleton {
-      networking.useDHCP = false;
-      networking.extraHosts = concatStrings (mapAttrsToList (n: host: ''
-        ${ipMap.${n}} ${toString (unique (
-          host.addresses.internal ++ host.addresses.external
-        ))}
-      '') config.resources.nixos.hosts);
-    };
-
-    resources.nixos.hosts.driver.nixos.imports = singleton {
+    nixosHosts.hosts.driver.nixos.imports = singleton {
       systemd.services.test-script = {
         wantedBy = [ "multi-user.target" ];
         wants = [ "network.target" ];
@@ -139,7 +99,9 @@ in {
 
       buildPhase = ''
         nixos-multi-spawn-client \
-          ${config.nixos-multi-spawn.configFile} 10.42.0.0/16 || true
+          ${config.nixos-multi-spawn.configFile} \
+          ${config.nixosHosts.networking.network} \
+          || true
 
         result=fs/driver/out
         if ! [ -d "$result" ] || [ -z "$(ls -A "$result")" ]; then

@@ -1,3 +1,8 @@
+## Models a set of named NixOS hosts.
+# 
+#  Each host has a NixOS configuration, SSH connection details, and Nix store
+#  details.
+
 { paths, config, lib, pkgs, ... }:
 
 with pkgs;
@@ -7,11 +12,11 @@ let
 
   topConfig = config;
 
-  cfg = config.resources.nixos;
+  cfg = config.nixosHosts;
 
   hostOpts = { name, config, ... }: {
     imports = cfg.commonHostImports ++ [
-      ../../named.nix
+      ./named.nix
     ];
 
     options = {
@@ -94,30 +99,29 @@ let
 in {
 
   imports = [
-    ../../cli.nix
-    ./deploy.nix
+    ./cli.nix
   ];
 
   options = {
 
-    resources = {
+    nixosHosts = {
 
-      nixos.commonHostImports = mkOption {
+      commonHostImports = mkOption {
         type = with types; listOf unspecified;
         default = [];
       };
 
-      nixos.commonNixosImports = mkOption {
+      commonNixosImports = mkOption {
         type = with types; listOf unspecified;
         default = [];
       };
 
-      nixos.commonBaseImports = mkOption {
+      commonBaseImports = mkOption {
         type = with types; nullOr (listOf path);
         default = null;
       };
 
-      nixos.hosts = mkOption {
+      hosts = mkOption {
         description = "NixOS hosts";
         type = with types; attrsOf (submodule hostOpts);
         default = {};

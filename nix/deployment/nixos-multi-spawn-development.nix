@@ -32,69 +32,40 @@ in {
     ../nixos-multi-spawn.nix
     ../cli.nix
     ./nixos-hosts.nix
+    ./nixos-hosts-ssh-no-pwd.nix
   ];
 
-  options = {
-    nixosHosts.hosts = mkOption {
-      type = with types; attrsOf (submodule ({name, ...}: {
-        config = {
-          ssh.extraArgs = [
-            "-q"
-            "-o PreferredAuthentications=password"
-            "-o StrictHostKeyChecking=no"
-            "-o UserKnownHostsFile=/dev/null"
-          ];
-        };
-      }));
+  cli.commands.provision.steps = {
+    destroy = {
+      inherit (config.cli.commands.destroy.steps.destroy) binary;
+    };
+    provision = {
+      dependencies = [ "destroy" ];
+      binary = writeScript "provision" ''
+        #!${stdenv.shell}
+        systemctl --user enable --runtime --now --quiet \
+          "${serviceDef}/${name}.service"
+
+        if ! systemctl --user is-active --quiet "${name}"; then
+          echo >&2 "Failed starting service ${name}"
+          exit 1
+        else
+          echo >&2 "Started service ${name}"
+        fi
+      '';
     };
   };
 
-  config = {
-    nixosHosts.commonNixosImports = singleton ({config,...}: {
-      users.users.root.password = mkForce "";
-      services.openssh = {
-        enable = true;
-        permitRootLogin = mkForce "yes";
-        passwordAuthentication = mkForce true;
-        extraConfig = ''
-          PermitEmptyPasswords yes
-          AuthenticationMethods none
-        '';
-      };
-    });
-
-    cli.commands.provision.steps = {
-      destroy = {
-        inherit (config.cli.commands.destroy.steps.destroy) binary;
-      };
-      provision = {
-        dependencies = [ "destroy" ];
-        binary = writeScript "provision" ''
-          #!${stdenv.shell}
-          systemctl --user enable --runtime --now --quiet \
-            "${serviceDef}/${name}.service"
-
-          if ! systemctl --user is-active --quiet "${name}"; then
-            echo >&2 "Failed starting service ${name}"
-            exit 1
-          else
-            echo >&2 "Started service ${name}"
-          fi
-        '';
-      };
-    };
-
-    cli.commands.destroy.steps = {
-      destroy = {
-        binary = writeScript "destroy" ''
-          #!${stdenv.shell}
-          if systemctl --user is-active --quiet "${name}.service"; then
-            systemctl --user stop "${name}.service"
-          fi
-          systemctl --user disable --quiet \
-            "${name}.service" 2>/dev/null || true
-        '';
-      };
+  cli.commands.destroy.steps = {
+    destroy = {
+      binary = writeScript "destroy" ''
+        #!${stdenv.shell}
+        if systemctl --user is-active --quiet "${name}.service"; then
+          systemctl --user stop "${name}.service"
+        fi
+        systemctl --user disable --quiet \
+          "${name}.service" 2>/dev/null || true
+      '';
     };
   };
 }

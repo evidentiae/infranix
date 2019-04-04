@@ -14,7 +14,7 @@ let
 
   initBinary = writeScript "init" ''
     #!${stdenv.shell}
-    ${iproute}/bin/ip addr add $IP dev host0 && \
+    ${iproute}/bin/ip addr add $IP/$PREFIX dev host0 && \
       ${iproute}/bin/ip link set dev host0 up
     exec "$@"
   '';
@@ -40,6 +40,7 @@ let
 
     exec ${pkgs.systemd}/bin/systemd-nspawn \
       --setenv=IP="$IP" \
+      --setenv=PREFIX="$PREFIX" \
       --rlimit=RLIMIT_NOFILE=infinity \
       --directory="$root" \
       --machine="$machine_id" \
@@ -49,9 +50,6 @@ let
       --tmpfs=/var \
       --network-zone="$network_zone" \
       --kill-signal=SIGRTMIN+3 \
-      --port=tcp:8080:80 \
-      --port=tcp:8081:81 \
-      --port=tcp:2222:22 \
       "${initBinary}" "$NIXOS_NOMAD_INIT"
   '';
 

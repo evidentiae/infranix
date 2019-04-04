@@ -78,6 +78,7 @@ let
 in {
 
   imports = [
+    ../nixos-hosts.nix
     ../cli.nix
   ];
 

@@ -15,7 +15,6 @@ let
     chmod ${if group == "root" then "0400" else "0440"} "${path}"
     chown "${user}"."${group}" "${path}"
     ${if cfg.dummy then ''
-      echo "copying dummy secret ${secret.dummyContents} to ${path}"
       cat "${secret.dummyContents}" > "${path}"
     '' else ''
       ${cfg.decrypter} "${toFile "secret" secret.encryptedContents}" > "${path}"

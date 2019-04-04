@@ -21,7 +21,7 @@ in {
         type = types.str;
         default = ''
           test -n "$IP" && \
-            ${iproute}/bin/ip addr add $IP dev host0 && \
+            ${iproute}/bin/ip addr add $IP/$PREFIX dev host0 && \
             ${iproute}/bin/ip link set dev host0 up
         '';
       };

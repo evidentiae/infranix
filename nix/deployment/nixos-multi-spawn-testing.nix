@@ -19,6 +19,7 @@ in {
     ../named.nix
     ../nixos-multi-spawn.nix
     ../testing.nix
+    ./nixos-hosts-ssh-no-pwd.nix
   ];
 
   config = {
@@ -29,6 +30,17 @@ in {
         "fs/driver/out/logs/script-validation.stdout"
         "fs/driver/out/logs/script-validation.stderr"
       ];
+    };
+
+    nixosHosts.commonNixosImports = singleton {
+      services.journald.extraConfig = ''
+        Storage=volatile
+        ForwardToConsole=yes
+        RateLimitBurst=0
+      '';
+      networking.hosts = mapAttrs' (_: h:
+        nameValuePair h.environment.IP h.addresses.external
+      ) config.nixosHosts.hosts;
     };
 
     nixosHosts.networking.network = "10.42.0.0/16";

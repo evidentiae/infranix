@@ -45,7 +45,8 @@ in {
             addresses.internal = [ name ];
             nixos.store.ssh.address = "localhost";
             ssh.address = ipMap.${name};
-            environment.IP = "${ipMap.${name}}/${toString prefix}";
+            environment.IP = "${ipMap.${name}}";
+            environment.PREFIX = "${toString prefix}";
           };
         }));
       };

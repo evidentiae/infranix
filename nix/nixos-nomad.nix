@@ -19,16 +19,13 @@ let
     exec "$@"
   '';
 
-  launchHost = writeScript "launch-host" ''
+  launchHost = host: writeScript "launch-host" ''
     #!${stdenv.shell}
-
-    set -x
 
     set -eu
     set -o pipefail
 
     host="$NOMAD_TASK_NAME"
-    init="$NIXOS_NOMAD_INIT"
     root="$NOMAD_TASK_DIR/root"
     alloc="$NOMAD_ALLOC_INDEX''${NOMAD_ALLOC_ID:0:8}"
     network_zone="$alloc"
@@ -50,13 +47,11 @@ let
       --tmpfs=/var \
       --network-zone="$network_zone" \
       --kill-signal=SIGRTMIN+3 \
-      "${initBinary}" "$NIXOS_NOMAD_INIT"
+      "${initBinary}" "${host.nixos.out.system}/init"
   '';
 
   setupNetwork = writeScript "setup-network" ''
     #!${stdenv.shell}
-
-    set -x
 
     set -eu
     set -o pipefail
@@ -74,7 +69,7 @@ let
     $iproute addr add "$ip" dev "$link"
     $iproute link set dev "$link" up
 
-    ${coreutils}/bin/sleep infinity
+    exec ${coreutils}/bin/sleep infinity
   '';
 
   makeTask = hostName: host: ''
@@ -82,10 +77,9 @@ let
       driver = "raw_exec"
       kill_signal = "SIGTERM"
       config {
-        command = "${launchHost}"
+        command = "${launchHost host}"
       }
       env {
-        NIXOS_NOMAD_INIT = "${host.nixos.out.system}/init"
         ${concatStringsSep "\n" (
           mapAttrsToList (k: v: ''${k} = "${v}"'') host.environment
         )}

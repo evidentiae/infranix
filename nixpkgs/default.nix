@@ -115,4 +115,8 @@ with builtins;
     )
   '';
 
+  nix-store-gcs-proxy = self.callPackage ((builtins.fetchTarball {
+    url = https://github.com/digital-asset/daml/archive/9c7357c7dea50ccd6038d9e4404065710a823384.tar.gz;
+    sha256 = "1dfwwgl4nqckzyampf267q8r5sl8w74f3wykarananngznkpwrgq";
+  }) + "/nix/tools/nix-store-gcs-proxy") {};
 }

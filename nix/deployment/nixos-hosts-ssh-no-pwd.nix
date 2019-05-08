@@ -4,7 +4,16 @@ with lib;
 with pkgs;
 with builtins;
 
-{
+let
+
+  sshOptions = [
+    "LogLevel=ERROR"
+    "PreferredAuthentications=password"
+    "StrictHostKeyChecking=no"
+    "UserKnownHostsFile=/dev/null"
+  ];
+
+in {
 
   imports = [
     ../nixos-hosts.nix
@@ -14,12 +23,7 @@ with builtins;
     nixosHosts.hosts = mkOption {
       type = with types; attrsOf (submodule ({name, ...}: {
         config = {
-          ssh.extraArgs = [
-            "-q"
-            "-o PreferredAuthentications=password"
-            "-o StrictHostKeyChecking=no"
-            "-o UserKnownHostsFile=/dev/null"
-          ];
+          ssh.extraArgs = map (o: "-o ${o}") sshOptions;
         };
       }));
     };
@@ -28,6 +32,7 @@ with builtins;
   config = {
     nixosHosts.commonNixosImports = singleton ({config,...}: {
       users.users.root.password = mkForce "";
+      programs.ssh.extraConfig = concatStringsSep "\n" sshOptions;
       services.openssh = {
         enable = true;
         permitRootLogin = mkForce "yes";

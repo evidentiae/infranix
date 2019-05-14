@@ -184,11 +184,18 @@ in {
       nixstore_ssh_address="$($server_info "$1" nixstore_ssh_address)"
       nixstore_ssh_args="$($server_info "$1" nixstore_ssh_args)"
 
+      copy_closures=()
+      for arg in "$@"; do
+        if [[ "$arg" == "${builtins.storeDir}"* ]]; then
+          copy_closures+=("$var")
+        fi
+      done
+
       shift 1
 
-      if [[ "$nixstore_ssh_address" != localhost ]] && [ "$#" -gt 0 ] && [[ "$1" == "${builtins.storeDir}"* ]]; then
+      if [[ "$nixstore_ssh_address" != localhost ]] && [ -n "$copy_closures" ]; then
         NIX_SSHOPTS="-lroot $nixstore_ssh_args" \
-          nix copy -s --to "ssh://$nixstore_ssh_address" "$1"
+          nix copy -s --to "ssh://$nixstore_ssh_address" "''${copy_closures[@]}"
       fi
 
       exec ssh -lroot $ssh_args "$ssh_address" "$@"

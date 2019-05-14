@@ -187,7 +187,7 @@ in {
       copy_closures=()
       for arg in "$@"; do
         if [[ "$arg" == "${builtins.storeDir}"* ]]; then
-          copy_closures+=("$var")
+          copy_closures+=("$arg")
         fi
       done
 

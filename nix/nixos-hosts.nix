@@ -193,7 +193,7 @@ in {
 
       shift 1
 
-      if [[ "$nixstore_ssh_address" != localhost ]] && [ -n "$copy_closures" ]; then
+      if [[ "$nixstore_ssh_address" != localhost ]] && [ ''${#copy_closures[@]} != 0 ]; then
         NIX_SSHOPTS="-lroot $nixstore_ssh_args" \
           nix copy -s --to "ssh://$nixstore_ssh_address" "''${copy_closures[@]}"
       fi

@@ -31,8 +31,6 @@ let
     network_zone="$alloc"
     machine_id="$host-$alloc"
 
-    env
-
     mkdir "$root"
 
     exec ${pkgs.systemd}/bin/systemd-nspawn \

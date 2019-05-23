@@ -40,7 +40,9 @@ let
       --directory="$root" \
       --machine="$machine_id" \
       -U \
-      --bind-ro=/nix/store \
+      ${concatStringsSep " " (mapAttrsToList (h: g:
+        ''--bind-ro="${h}:${g}"''
+      ) host.readOnlyBindMounts)} \
       --tmpfs=/nix/var \
       --tmpfs=/var \
       --network-zone="$network_zone" \
@@ -97,6 +99,20 @@ in {
       jobDefinition = mkOption {
         type = types.package;
       };
+    };
+
+    nixosHosts.hosts = mkOption {
+      type = with types; attrsOf (submodule ({name, ...}: {
+        options = {
+          readOnlyBindMounts = mkOption {
+            type = with types; attrsOf str;
+            default = {};
+          };
+        };
+        config = {
+          readOnlyBindMounts."/nix/store" = "/nix/store";
+        };
+      }));
     };
   };
 

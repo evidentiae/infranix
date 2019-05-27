@@ -31,7 +31,7 @@ with builtins;
 
     src = super.linkFarm "${name}-src" (
       [{ name = "${name}.hs"; path = toFile "${name}.hs" script; }] ++
-      super.lib.imap (i: m: { name = "mod${toString i}.hs"; path = m; }) extraModules
+      super.lib.imap (i: m: { name = baseNameOf m; path = "${m}"; }) extraModules
     );
 
     buildPhase = ''

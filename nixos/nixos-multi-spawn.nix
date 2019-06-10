@@ -144,6 +144,7 @@ in {
             Type = "notify";
             NotifyAccess = "all";
             ExecStart = "${pkgs.socat}/bin/socat FD:3 EXEC:${server},nofork";
+            TimeoutStopSec = 300;
           };
         };
       }) cfg.allowedGroups)

@@ -7,6 +7,8 @@ let
 
   cfg = config.services.nix-store-gcs-proxy;
 
+  enabledProxies = filterAttrs (_: p: p.enable) cfg.proxies;
+
   mkService = n: p: {
     wantedBy = [ "nix-daemon.service" ];
     before = [ "nix-daemon.service" ];
@@ -24,6 +26,10 @@ in {
       default = {};
       type = with types; attrsOf (submodule ({...}: {
         options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+          };
           bucket = mkOption {
             type = types.str;
           };
@@ -44,15 +50,15 @@ in {
     };
   };
 
-  config = lib.mkIf (cfg.proxies != {}) {
+  config = lib.mkIf (enabledProxies != {}) {
     systemd.services = mapAttrs' (n: p:
       nameValuePair "nix-store-gcs-proxy-${n}" (mkService n p)
-    ) cfg.proxies;
+    ) enabledProxies;
     nix.binaryCaches = map (p: "http://127.0.0.1:${toString p.listenPort}") (
-      attrValues cfg.proxies
+      attrValues enabledProxies
     );
     nix.binaryCachePublicKeys = unique (concatMap (p: p.publicKeys) (
-      attrValues cfg.proxies
+      attrValues enabledProxies
     ));
   };
 }

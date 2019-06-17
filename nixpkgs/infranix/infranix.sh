@@ -8,11 +8,21 @@ cmd=""
 cmdstr=""
 cmdArgs=()
 nixArgs=()
+extraPaths=()
 bootstrap=1
 pathsfile=""
+tmppathsfile=""
 configuration=""
 BASE_DIR=""
 timed=""
+
+function cleanup() {
+  if [ -n "$tmppathsfile" ]; then
+    rm -f "$tmppathsfile"
+  fi
+}
+
+trap cleanup EXIT
 
 while [ "$#" -gt 0 ]; do
   x="$1"; shift 1
@@ -57,6 +67,21 @@ while [ "$#" -gt 0 ]; do
       cmd="$1"
       shift
       ;;
+    -I)
+      if [ "$#" -lt 1 ]; then
+        echo >&2 "Invalid -I option argument"
+        exit 1
+      fi
+      kv="$1"
+      k="${kv%%=*}"
+      v="${kv#*=}"
+      if [ -z "$k" ] || [ -z "$v" ]; then
+        echo >&2 "Invalid -I option argument"
+        exit 1
+      fi
+      extraPaths+=("\"$k\" = $v")
+      shift
+      ;;
     *)
       if [ -z "$cmd" ] && [ -z "$cmdstr" ]; then
         nixArgs+=("$x")
@@ -83,6 +108,16 @@ fi
 if ! [ -f "$pathsfile" ]; then
   echo >&2 "Can't find paths file $pathsfile"
   exit 1
+fi
+
+if (( ${#extraPaths[@]} )); then
+  tmppathsfile="$(mktemp -p . .paths-XXXXX.nix)"
+  echo "(import $(readlink -m "$pathsfile")) // {" >> "$tmppathsfile"
+  for p in "${extraPaths[@]}"; do
+   echo "$p;" >> "$tmppathsfile"
+  done
+  echo "}" >> "$tmppathsfile"
+  pathsfile="$tmppathsfile"
 fi
 
 if [ -z "$BASE_DIR" ]; then

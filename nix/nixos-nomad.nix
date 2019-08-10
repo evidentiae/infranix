@@ -43,6 +43,9 @@ let
       ${concatStringsSep " " (mapAttrsToList (h: g:
         ''--bind-ro="${h}:${g}"''
       ) host.readOnlyBindMounts)} \
+      ${concatStringsSep " " (mapAttrsToList (h: g:
+        ''--bind="${h}:${g}"''
+      ) host.readWriteBindMounts)} \
       --tmpfs=/nix/var \
       --tmpfs=/var \
       --network-zone="$network_zone" \
@@ -105,6 +108,10 @@ in {
       type = with types; attrsOf (submodule ({name, ...}: {
         options = {
           readOnlyBindMounts = mkOption {
+            type = with types; attrsOf str;
+            default = {};
+          };
+          readWriteBindMounts = mkOption {
             type = with types; attrsOf str;
             default = {};
           };

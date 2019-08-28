@@ -10,8 +10,7 @@ let
   enabledProxies = filterAttrs (_: p: p.enable) cfg.proxies;
 
   mkService = n: p: {
-    wantedBy = [ "nix-daemon.service" ];
-    before = [ "nix-daemon.service" ];
+    wantedBy = [ "multi-user.target" ];
     serviceConfig.ExecStart = "${writeScriptBin "nix-store-gcs-proxy-${n}" ''
       #!${stdenv.shell}
       ${nix-store-gcs-proxy}/bin/nix-store-gcs-proxy \

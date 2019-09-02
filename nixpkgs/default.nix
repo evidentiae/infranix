@@ -59,6 +59,13 @@ with builtins;
     '';
   };
 
+  haskellPackages = super.haskellPackages.override (old: {
+    overrides = super.lib.composeExtensions (old.overrides or (_: _: {}))
+      (hself: hsuper: {
+        digest-pure = self.haskell.lib.dontCheck hsuper.digest-pure;
+      });
+  });
+
   nixos-multi-spawn = self.haskellPackages.callPackage (super.fetchFromGitHub {
     owner = "evidentiae";
     repo = "nixos-multi-spawn";

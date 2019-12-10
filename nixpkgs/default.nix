@@ -81,7 +81,7 @@ with builtins;
     config="$1"
     net="$2"
     socat=${self.socat}/bin/socat
-    socket="/run/nixos-multi-spawn/$(id -gn).socket"
+    socket="/run/nixos-multi-spawn/$(${self.coreutils}/bin/id -gn).socket"
 
     if ! [ -w "$socket" ]; then
       echo >&2 "Socket '$socket' not writable"

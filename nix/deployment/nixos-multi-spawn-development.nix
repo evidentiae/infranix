@@ -63,7 +63,7 @@ in {
         if systemctl --user is-active --quiet "${name}.service"; then
           systemctl --user stop "${name}.service"
         fi
-        systemctl --user disable --quiet \
+        systemctl --user --runtime disable --quiet \
           "${name}.service" 2>/dev/null || true
       '';
     };

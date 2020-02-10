@@ -35,12 +35,18 @@ in rec {
       binaryIpToOctets (substring 0 prefix (ipToBinary network) + hostAddr)
     );
 
+  # For the given prefix, return the index of the host
+  indexOfHost = ipaddr: prefix: binaryToInt (
+    let b = ipToBinary ipaddr;
+    in substring prefix ((stringLength b) - prefix) b
+  );
+
   # Return the host count for the given network prefix
   hostCount = prefix: pow2 (32 - prefix) - 2;
 
   # Return the broadcast address for the given network
   broadcastAddress = network: prefix:
-    ipAddress network prefix ((hostCount prefix) + 1);
+    ipAddressOfHost network prefix ((hostCount prefix) + 1);
 
   # Return the first host IP address of a network
   minHostAddress = network: prefix: ipAddressOfHost network prefix 1;

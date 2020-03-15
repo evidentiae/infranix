@@ -4,14 +4,14 @@ with lib;
 
 let
 
-  cfg = config.networking.networkmanager.dynamicHosts;
+  cfg = config.networking.networkmanager.mutableHosts;
 
   enable = config.networking.networkmanager.enable && cfg.enable &&
     cfg.hostsDirs != {};
 
 in {
   options = {
-    networking.networkmanager.dynamicHosts = {
+    networking.networkmanager.mutableHosts = {
       enable = mkOption {
         type = types.bool;
         default = false;
@@ -36,7 +36,7 @@ in {
 
   config = mkIf enable {
 
-    networking.networkmanager.useDnsmasq = true;
+    networking.networkmanager.dns = "dnsmasq";
 
     systemd.services.nm-setup-hostsdirs = {
       wantedBy = [ "network-manager.service" ];

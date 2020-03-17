@@ -39,9 +39,8 @@ in {
     networking.networkmanager.dns = "dnsmasq";
 
     systemd.services.nm-setup-hostsdirs = {
-      wantedBy = [ "network-manager.service" ];
-      before = [ "network-manager.service" ];
-      partOf = [ "network-manager.service" ];
+      wantedBy = [ "NetworkManager.service" ];
+      before = [ "NetworkManager.service" ];
       script = concatStrings (mapAttrsToList (n: d: ''
         mkdir -p "/run/NetworkManager/hostsdirs/${n}"
         chown "${d.user}:${d.group}" "/run/NetworkManager/hostsdirs/${n}"
@@ -49,7 +48,7 @@ in {
       '') cfg.hostsDirs);
       serviceConfig = {
         Type = "oneshot";
-        RemainAfterExist = true;
+        RemainAfterExit = true;
       };
     };
 

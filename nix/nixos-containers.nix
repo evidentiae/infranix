@@ -72,6 +72,10 @@ in {
         ) ipMap;
       };
 
+      system.activationScripts.nix = lib.mkForce ''
+        mkdir -p /nix/var/nix/gcroots
+      '';
+
       # Disable remount for specialfs
       # For some reason, remounts seems to be forbidden for
       # some special filesystems when systemd-nspawn runs with private user

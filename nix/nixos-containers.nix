@@ -58,47 +58,46 @@ in {
       ./addressable.nix
     ];
 
-    nixosHosts.commonNixosImports = singleton ({config,...}: {
-      boot.isContainer = true;
+    nixosHosts.commonNixosImports = [
+      ../nixos/disable-nix.nix
+      ({config,...}: {
+        boot.isContainer = true;
 
-      # Uses mount namespaces that doesn't seem to work in systemd-nspawn
-      services.nscd.enable = false;
+        # Uses mount namespaces that doesn't seem to work in systemd-nspawn
+        services.nscd.enable = false;
 
-      networking = {
-        useDHCP = false;
-        defaultGateway = minHostAddress network prefix;
-        hosts = mapAttrs' (h: ip:
-          nameValuePair ip hosts.${h}.addresses.internal
-        ) ipMap;
-      };
+        networking = {
+          useDHCP = false;
+          defaultGateway = minHostAddress network prefix;
+          hosts = mapAttrs' (h: ip:
+            nameValuePair ip hosts.${h}.addresses.internal
+          ) ipMap;
+        };
 
-      system.activationScripts.nix = lib.mkForce ''
-        mkdir -p /nix/var/nix/gcroots
-      '';
+        # Disable remount for specialfs
+        # For some reason, remounts seems to be forbidden for
+        # some special filesystems when systemd-nspawn runs with private user
+        # namespace. Needs to investigate if this can be fixed in upstream
+        # nixpkgs. The script below is copied from nixpkgs and changed slightly
+        # (return 0 when fs is already mounted)
+        system.activationScripts.specialfs = mkForce ''
+          specialMount() {
+            local device="$1"
+            local mountPoint="$2"
+            local options="$3"
+            local fsType="$4"
+            local allowRemount="$5"
 
-      # Disable remount for specialfs
-      # For some reason, remounts seems to be forbidden for
-      # some special filesystems when systemd-nspawn runs with private user
-      # namespace. Needs to investigate if this can be fixed in upstream
-      # nixpkgs. The script below is copied from nixpkgs and changed slightly
-      # (return 0 when fs is already mounted)
-      system.activationScripts.specialfs = mkForce ''
-        specialMount() {
-          local device="$1"
-          local mountPoint="$2"
-          local options="$3"
-          local fsType="$4"
-          local allowRemount="$5"
-
-          if mountpoint -q "$mountPoint"; then
-            return 0
-          else
-            mkdir -m 0755 -p "$mountPoint"
-          fi
-          mount -t "$fsType" -o "$options" "$device" "$mountPoint"
-        }
-        source ${config.system.build.earlyMountScript}
-      '';
-    });
+            if mountpoint -q "$mountPoint"; then
+              return 0
+            else
+              mkdir -m 0755 -p "$mountPoint"
+            fi
+            mount -t "$fsType" -o "$options" "$device" "$mountPoint"
+          }
+          source ${config.system.build.earlyMountScript}
+        '';
+      })
+    ];
   };
 }

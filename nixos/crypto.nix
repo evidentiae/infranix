@@ -9,6 +9,8 @@ let
   topConfig = config;
   cfg = config.crypto;
 
+  safeSvcName = replaceStrings ["@"] ["_"];
+
   decryptSecretScript = { secret, path, user, group }: ''
     mkdir -p "$(dirname "${path}")"
     touch "${path}"
@@ -21,7 +23,7 @@ let
     ''}
   '';
 
-  decryptSecretsScript = svcName: writeScript "decrypt-secrets-${svcName}" ''
+  decryptSecretsScript = svcName: writeScript "decrypt-secrets-${safeSvcName svcName}" ''
     #!${bash}/bin/bash
     ${concatMapStrings ({svc,secretName,secret}:
       decryptSecretScript {

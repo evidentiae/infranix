@@ -186,6 +186,11 @@ in {
         type = types.package;
       };
 
+      build.shell = mkOption {
+        type = types.package;
+        readOnly = true;
+      };
+
       shell = {
         bootstrapScript = mkOption {
           type = types.lines;
@@ -223,6 +228,11 @@ in {
       '') cfg.shell.environment)}
       ${cfg.shell.shellHook}
     '');
+
+    cli.build.shell = pkgs.writeScriptBin "shell" ''
+      #!${pkgs.stdenv.shell}
+      exec ${pkgs.bashInteractive}/bin/bash --rcfile ${cfg.build.bashrc}
+    '';
 
     cli.build.bootstrapScript = writeScript "bootstrap.sh" ''
       #!${stdenv.shell}

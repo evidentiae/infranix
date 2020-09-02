@@ -3,7 +3,7 @@
 #  Each host has a NixOS configuration, SSH connection details, and Nix store
 #  details.
 
-{ paths, config, lib, pkgs, ... }:
+{ inputs, config, lib, pkgs, ... }:
 
 with pkgs;
 with lib;
@@ -79,23 +79,25 @@ let
         baseImports = cfg.commonBaseImports;
         out =
           let
-            pkgsModule = { lib, ... }: {
-              nixpkgs.pkgs = pkgs;
-              nixpkgs.config = topConfig.nixpkgs.config;
-            };
-            eval = (import (paths.nixpkgs + "/nixos/lib/eval-config.nix")) ({
-              specialArgs.paths = paths;
-              modules = config.nixos.imports ++ [ pkgsModule ];
-            } // optionalAttrs (config.nixos.baseImports != null) {
-              baseModules = config.nixos.baseImports;
-            });
+            eval = inputs.nixpkgs.lib.nixosSystem (
+              { specialArgs.inputs = inputs;
+                specialArgs.paths = inputs;
+                system = topConfig.nixpkgs.system;
+                modules = config.nixos.imports ++ [{
+                  nixpkgs.pkgs = pkgs;
+                  nixpkgs.config = topConfig.nixpkgs.config;
+                }];
+              } // optionalAttrs (config.nixos.baseImports != null) {
+                baseModules = config.nixos.baseImports;
+              }
+            );
           in {
             inherit (eval) config options;
             system = eval.config.system.build.toplevel;
           };
-        };
       };
     };
+  };
 
 in {
 

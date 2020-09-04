@@ -5,22 +5,24 @@
 
   outputs = {self, nixpkgs}: {
 
-    lib.evalModulesWithInputs = {inputs ? {}, ...}@attrs:
-      nixpkgs.lib.evalModules ((builtins.removeAttrs attrs ["inputs"]) // {
-        specialArgs = (attrs.specialArgs or {}) // {
-          inherit inputs;
-          paths = inputs; # for backwards compatibility
-        };
-      });
+    lib.evalModulesWithInputs = {modules ? [], inputs ? {}, ...}@attrs:
+      nixpkgs.lib.evalModules (
+        (builtins.removeAttrs attrs ["system" "inputs" "modules"]) // {
+          specialArgs = (attrs.specialArgs or {}) // {
+            inherit inputs;
+            paths = inputs; # for backwards compatibility
+          };
+          modules = modules ++ [
+            (nixpkgs + "/nixos/modules/misc/nixpkgs.nix")
+            { nixpkgs.system = attrs.system; }
+            ./nix/cli.nix
+          ];
+        }
+      );
 
-    lib.mkShell = system: {modules, ...}@attrs:
-      (self.lib.evalModulesWithInputs (attrs // {
-        modules = modules ++ [
-          (nixpkgs + "/nixos/modules/misc/nixpkgs.nix")
-          { nixpkgs.system = system; }
-          ./nix/cli.nix
-        ];
-      })).config.cli.build.shell;
+    lib.mkShell = attrs: (
+      self.lib.evalModulesWithInputs attrs
+    ).config.cli.build.shell;
 
   };
 }

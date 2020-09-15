@@ -231,7 +231,8 @@ in {
 
     cli.build.shell = pkgs.writeScriptBin "shell" ''
       #!${pkgs.stdenv.shell}
-      exec ${pkgs.bashInteractive}/bin/bash --rcfile ${cfg.build.bashrc}
+      export SHELL_RC="${cfg.build.bashrc}"
+      exec ${pkgs.bashInteractive}/bin/bash --rcfile "$SHELL_RC"
     '';
 
     cli.build.bootstrapScript = writeScript "bootstrap.sh" ''

@@ -63,9 +63,6 @@ in {
       ({config,...}: {
         boot.isContainer = true;
 
-        # Uses mount namespaces that doesn't seem to work in systemd-nspawn
-        services.nscd.enable = false;
-
         networking = {
           useDHCP = false;
           defaultGateway = minHostAddress network prefix;

@@ -82,7 +82,7 @@ in {
     ../cli.nix
   ];
 
-  cli.commands = {
+  cli.commands = mkIf (hosts != {}) {
 
     activate.steps = (mapAttrs (name: host: {
       dependencies = ["install"];

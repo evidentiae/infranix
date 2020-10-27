@@ -81,7 +81,6 @@ let
           let
             eval = inputs.nixpkgs.lib.nixosSystem (
               { specialArgs.inputs = inputs;
-                specialArgs.paths = inputs;
                 system = topConfig.nixpkgs.system;
                 modules = config.nixos.imports ++ [{
                   nixpkgs.pkgs = pkgs;

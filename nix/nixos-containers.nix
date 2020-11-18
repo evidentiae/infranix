@@ -67,7 +67,7 @@ in {
           useDHCP = false;
           defaultGateway = minHostAddress network prefix;
           hosts = mapAttrs' (h: ip:
-            nameValuePair ip hosts.${h}.addresses.internal
+            nameValuePair ip (with hosts.${h}.addresses; internal ++ external)
           ) ipMap;
         };
 

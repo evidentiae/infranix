@@ -24,5 +24,9 @@
       self.lib.evalModulesWithInputs attrs
     ).config.cli.build.shell;
 
+    lib.mkBootstrapScript = attrs: (
+      self.lib.evalModulesWithInputs attrs
+    ).config.cli.build.bootstrapScript;
+
   };
 }

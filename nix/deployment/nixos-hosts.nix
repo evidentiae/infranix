@@ -99,13 +99,25 @@ in {
         binary = with host.nixos.store.ssh; writeScript "install-${name}" ''
           #!${stdenv.shell}
           set -e
+
           server_info=${config.cli.commands.server.subCommands.info.binary}
           nixstore_ssh_address="$($server_info "${name}" nixstore_ssh_address)"
           nixstore_ssh_args="$($server_info "${name}" nixstore_ssh_args)"
+          ssh_address="$($server_info "${name}" ssh_address)"
+          ssh_args="$($server_info "${name}" ssh_args)"
+          ssh="ssh -lroot $ssh_args $ssh_address"
+          sys="${host.nixos.out.system}"
+
           if [[ "$nixstore_ssh_address" != localhost ]]; then
+            $ssh "${concatStringsSep "&&" [
+              "shopt -s huponexit"
+              "ln -sfT $sys /nix/var/nix/gcroots/next-system"
+            ]}" 2>&1 | while read line; do
+              echo >&2 "[${name}] $line"
+            done
+
             NIX_SSHOPTS="-lroot $nixstore_ssh_args" \
-              nix copy -s --to "ssh://$nixstore_ssh_address" \
-                "${host.nixos.out.system}"
+              nix copy -s --to "ssh://$nixstore_ssh_address" "$sys"
           fi
         '';
       }) hosts;

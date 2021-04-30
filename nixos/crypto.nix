@@ -9,24 +9,27 @@ let
   topConfig = config;
   cfg = config.crypto;
 
+  secretFiles = runCommand "secrets" {} ''
+    mkdir "$out"
+    ${concatStrings (mapAttrsToList (name: secret: ''
+      echo "${optionalString (!cfg.dummy) secret.encryptedContents}" > "$out/${name}"
+    '') cfg.secrets)}
+  '';
+
   safeSvcName = replaceStrings ["@"] ["_"];
 
-  decryptSecretScript = { secret, path, user, group }: ''
+  decryptSecretToFile = { secret, path, user, group }: ''
     mkdir -p "$(dirname "${path}")"
     touch "${path}"
     chmod ${if group == "root" then "0400" else "0440"} "${path}"
     chown "${user}"."${group}" "${path}"
-    ${if cfg.dummy then ''
-      cat "${secret.dummyContents}" > "${path}"
-    '' else ''
-      ${cfg.decrypter} "${toFile "secret" secret.encryptedContents}" > "${path}"
-    ''}
+    ( ${secret.decryptionCommand} ) > "${path}"
   '';
 
-  decryptSecretsScript = svcName: writeScript "decrypt-secrets-${safeSvcName svcName}" ''
+  decryptSecretsForService = svcName: writeScript "decrypt-secrets-${safeSvcName svcName}" ''
     #!${bash}/bin/bash
     ${concatMapStrings ({svc,secretName,secret}:
-      decryptSecretScript {
+      decryptSecretToFile {
         inherit secret;
         inherit (svc) path user group;
       }
@@ -67,6 +70,14 @@ let
       dummyContents = mkOption {
         type = types.path;
       };
+      decryptionCommand = mkOption {
+        type = types.str;
+        readOnly = true;
+        default =
+          if cfg.dummy
+          then ''"${pkgs.coreutils}/bin/cat" "${config.dummyContents}"''
+          else ''"${cfg.decrypter}" "${secretFiles}/${name}"'';
+      };
     };
   };
 
@@ -86,7 +97,7 @@ let
   dependentServices = map (svcName: {
     ${svcName} = {
       restartTriggers = singleton (hashString "sha256" (
-        "${decryptSecretsScript svcName}"
+        "${decryptSecretsForService svcName}"
       ));
     };
   }) svcNames;
@@ -95,7 +106,7 @@ let
     "secrets-for-${svcName}" = rec {
       wantedBy = [ "${svcName}.service" ];
       before = wantedBy;
-      script = "${decryptSecretsScript svcName}";
+      script = "${decryptSecretsForService svcName}";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -164,7 +175,7 @@ let
         #!${bash}/bin/bash
         set -eu
         ${concatMapStrings (s: let secret = cfg.secrets.${s}; in
-          decryptSecretScript {
+          decryptSecretToFile {
             inherit secret;
             path = "/secrets/${s}";
             user = "root";
@@ -183,6 +194,10 @@ in {
       dummy = mkOption {
         type = types.bool;
         default = false;
+        description = ''
+          If true, each secret's dummyContents will be used instead of
+          decrypting encrypted files.
+        '';
       };
       decrypter = mkOption {
         type = types.path;
@@ -208,20 +223,5 @@ in {
     systemd.services = mkMerge (
       dependentServices ++ decryptServices ++ purgeOldSecrets
     );
-
-    system.activationScripts = mkIf cfg.dummy {
-      install-dummy-secrets.deps = [];
-      install-dummy-secrets.text = ''
-        mkdir -p /secrets
-        ${concatMapStrings ({name, value}:
-          decryptSecretScript {
-            secret = value;
-            path = "/secrets/${name}";
-            user = "root";
-            group = "root";
-          }
-        ) (mapAttrsToList nameValuePair cfg.secrets)}
-      '';
-    };
   };
 }

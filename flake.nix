@@ -1,20 +1,17 @@
 {
   description = "infranix";
 
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/20.03";
+  outputs = {self}: {
 
-  outputs = {self, nixpkgs}: {
-
-    lib.evalModulesWithInputs = {modules ? [], inputs ? {}, ...}@attrs:
-      nixpkgs.lib.evalModules (
+    lib.evalModulesWithInputs = {modules ? [], inputs, system, ...}@attrs:
+      inputs.nixpkgs.lib.evalModules (
         (builtins.removeAttrs attrs ["system" "inputs" "modules"]) // {
           specialArgs = (attrs.specialArgs or {}) // {
             inherit inputs;
-            paths = inputs; # for backwards compatibility
           };
           modules = modules ++ [
-            (nixpkgs + "/nixos/modules/misc/nixpkgs.nix")
-            { nixpkgs.system = attrs.system; }
+            (inputs.nixpkgs + "/nixos/modules/misc/nixpkgs.nix")
+            { nixpkgs.system = system; }
             ./nix/cli.nix
           ];
         }

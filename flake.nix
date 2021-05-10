@@ -5,6 +5,8 @@
 
     overlay = import ./nixpkgs;
 
+    overlays = [ self.overlay ];
+
     lib = {
 
       evalModulesWithInputs = {

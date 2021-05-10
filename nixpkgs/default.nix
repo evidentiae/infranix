@@ -3,16 +3,6 @@ self: super:
 with builtins;
 
 {
-  infranix = self.callPackage ./infranix {};
-
-  nixos-rebuild-with-paths = super.substituteAll {
-    name = "nixos-rebuild-with-paths";
-    dir = "bin";
-    isExecutable = true;
-    src = ./nixos-rebuild-with-paths;
-    lib = ../lib;
-  };
-
   writeHaskellScript = name: {
     pkgfun ? (_: []), buildInputs ? [], extraModules ? [], hlint ? true,
     ghcopts ? [

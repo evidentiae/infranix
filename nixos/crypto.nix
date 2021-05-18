@@ -223,5 +223,20 @@ in {
     systemd.services = mkMerge (
       dependentServices ++ decryptServices ++ purgeOldSecrets
     );
+
+    system.activationScripts = mkIf cfg.dummy {
+      install-dummy-secrets.deps = [];
+      install-dummy-secrets.text = ''
+        mkdir -p /secrets
+        ${concatMapStrings ({name, value}:
+          decryptSecretToFile {
+            secret = value;
+            path = "/secrets/${name}";
+            user = "root";
+            group = "root";
+          }
+        ) (mapAttrsToList nameValuePair cfg.secrets)}
+      '';
+    };
   };
 }

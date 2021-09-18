@@ -22,7 +22,7 @@ let
       isLibrary = false;
       isExecutable = true;
       executableHaskellDepends = [ base directory parsec process unix ];
-      license = stdenv.lib.licenses.mit;
+      license = lib.licenses.mit;
     }
   ) {};
 

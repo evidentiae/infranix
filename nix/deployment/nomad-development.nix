@@ -24,7 +24,8 @@ in {
       dependencies = [ "destroy" ];
       binary = writeScript "provision" ''
         #!${stdenv.shell}
-        nomad run "${nomadJob}"
+        GIT_REPO="$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null || echo "")"
+        nomad run -var git-repo="$GIT_REPO" "${nomadJob}"
       '';
     };
   };

@@ -40,6 +40,7 @@ let
       --directory="$root" \
       --machine="$machine_id" \
       -U \
+      ''${GIT_REPO:+--bind-ro="$GIT_REPO:/git-repo"} \
       ${concatStringsSep " " (mapAttrsToList (h: g:
         ''--bind-ro="${h}:${g}"''
       ) host.readOnlyBindMounts)} \
@@ -83,6 +84,7 @@ let
         command = "${launchHost host}"
       }
       env {
+        GIT_REPO = "''${var.git-repo}"
         ${concatStringsSep "\n" (
           mapAttrsToList (k: v: ''${k} = "${v}"'') host.environment
         )}
@@ -125,6 +127,9 @@ in {
 
   config = {
     nixos-nomad.jobDefinition = writeText "job.nomad" ''
+      variable "git-repo" {
+        type = string
+      }
       job "${name}" {
         type = "service"
         datacenters = ["dc1"]

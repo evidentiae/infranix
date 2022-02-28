@@ -61,7 +61,7 @@ let
 
     if [[ "$net" =~ ${netRegex} ]]; then
       prefix="''${net#*/}"
-      ip="$(${pkgs.ipcalc}/bin/ipcalc -nb "$net" | \
+      ip="$(${pkgs.ipcalc}/bin/ipcalc "$net" | \
         ${pkgs.gnugrep}/bin/grep HostMin | ${pkgs.gawk}/bin/awk '{print $2}')/$prefix"
       iproute=${pkgs.iproute}/bin/ip
       link="vz-$zone"

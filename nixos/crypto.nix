@@ -166,7 +166,7 @@ let
         mkdir -p "$root/$d"
         mount  --make-rslave --bind "/$d" "$root/$d"
       done
-      for d in run sys dev; do
+      for d in run sys dev home; do
         mkdir -p "$root/$d"
         mount --make-rslave --rbind "/$d" "$root/$d" || true
       done

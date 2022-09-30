@@ -138,7 +138,7 @@ in {
           reloadIfChanged = false;
           restartIfChanged = false;
           serviceConfig = {
-            LimitNOFILE = "infinity";
+            LimitNOFILE = "200000";
             PrivateTmp = true;
             KillMode = "process";
             Type = "notify";

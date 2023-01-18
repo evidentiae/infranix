@@ -22,7 +22,7 @@ let
     mkdir -p "$(dirname "${path}")"
     touch "${path}"
     chmod ${if group == "root" then "0400" else "0440"} "${path}"
-    chown "${user}"."${group}" "${path}"
+    chown "${user}":"${group}" "${path}"
     ( ${secret.decryptionCommand} ) > "${path}"
   '';
 

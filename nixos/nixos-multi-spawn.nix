@@ -115,7 +115,7 @@ in {
 
     environment.systemPackages = [ pkgs.nixos-multi-spawn-client ];
 
-    nix.sandboxPaths = mkIf cfg.allowNix [
+    nix.settings.extra-sandbox-paths = mkIf cfg.allowNix [
       "/run/nixos-multi-spawn/nixbld.socket"
     ];
 

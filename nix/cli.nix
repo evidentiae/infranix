@@ -87,7 +87,7 @@ let
   mkSteps = name: bin: maxjobs: steps:
     (if bin then writeScriptBin else writeScript) (safeName name) ''
       #!${stdenv.shell}
-      exec ${gnumake}/bin/make cmdargs="$*" -j ${toString maxjobs} \
+      exec ${gnumake42}/bin/make cmdargs="$*" -j ${toString maxjobs} \
         --no-print-directory -f ${makefile name steps} all
     '';
 

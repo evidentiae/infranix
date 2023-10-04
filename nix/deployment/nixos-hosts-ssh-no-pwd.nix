@@ -35,8 +35,10 @@ in {
       programs.ssh.extraConfig = concatStringsSep "\n" sshOptions;
       services.openssh = {
         enable = true;
-        permitRootLogin = mkForce "yes";
-        passwordAuthentication = mkForce true;
+        settings = {
+          PermitRootLogin = mkForce "yes";
+          PasswordAuthentication = mkForce true;
+        };
         extraConfig = ''
           PermitEmptyPasswords yes
           AuthenticationMethods none

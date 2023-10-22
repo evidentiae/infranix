@@ -50,7 +50,10 @@ let
       };
       group = mkOption {
         type = types.str;
-        default = "root";
+        default =
+          if topConfig.systemd.services ? ${name}.serviceConfig.Group
+          then topConfig.systemd.services.${name}.serviceConfig.Group
+          else "root";
       };
     };
     config = {

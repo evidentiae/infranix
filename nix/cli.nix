@@ -32,11 +32,16 @@ let
     )
   );
 
-  stepOpts = {name, config, ... }: {
+  stepOpts = parent: {name, config, ... }: {
     options = {
       binary = mkOption {
         type = with types; nullOr path;
         default = null;
+        apply = x: if x == null || !cfg.logTimes then x else
+          writeShellScript "${name}-timed" ''
+            command time -ao "$TIME_LOG" -f "%E %x ${parent}:${name}" \
+              "${x}" "$@"
+          '';
       };
       dependencies = mkOption {
         type = with types; listOf str;
@@ -98,7 +103,7 @@ let
         default = null;
       };
       steps = mkOption {
-        type = with types; attrsOf (submodule stepOpts);
+        type = with types; attrsOf (submodule (stepOpts "${parentName}:${name}"));
         default = {};
       };
       maxParallelism = mkOption {
@@ -125,7 +130,7 @@ let
       };
 
       steps = mkOption {
-        type = with types; attrsOf (submodule stepOpts);
+        type = with types; attrsOf (submodule (stepOpts name));
         default = {};
       };
 
@@ -191,6 +196,11 @@ in {
         readOnly = true;
       };
 
+      logTimes = mkOption {
+        type = types.bool;
+        default = false;
+      };
+
       shell = {
         bootstrapScript = mkOption {
           type = types.lines;
@@ -226,6 +236,9 @@ in {
       ${concatStrings (mapAttrsToList (k: v: ''
         export ${k}="${toString v}"
       '') cfg.shell.environment)}
+      ${optionalString cfg.logTimes ''
+        export TIME_LOG="$(pwd)/TIMING-$(date +%s).log"
+      ''}
       ${cfg.shell.shellHook}
     '');
 

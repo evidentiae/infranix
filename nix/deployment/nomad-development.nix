@@ -13,7 +13,6 @@ in {
     ../nixos-nomad.nix
     ../cli.nix
     ./nixos-hosts.nix
-    ./nixos-hosts-ssh-no-pwd.nix
   ];
 
   cli.commands.provision.steps = {

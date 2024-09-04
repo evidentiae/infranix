@@ -32,6 +32,7 @@ in {
   config = {
     nixosHosts.commonNixosImports = singleton ({config,...}: {
       users.users.root.password = mkForce "";
+      security.pam.services.sshd.allowNullPassword = true;
       programs.ssh.extraConfig = concatStringsSep "\n" sshOptions;
       services.openssh = {
         enable = true;

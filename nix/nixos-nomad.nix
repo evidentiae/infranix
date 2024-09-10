@@ -12,6 +12,8 @@ let
   inherit (config.nixosHosts) hosts networking;
   inherit (splitCIDR networking.network) network prefix;
 
+  firstHost = head (mapAttrsToList (n: _: n) hosts);
+
   initBinary = writeScript "init" ''
     #!${stdenv.shell}
     ${iproute}/bin/ip addr add $IP/$PREFIX dev host0 && \
@@ -42,7 +44,7 @@ let
       fi
     done
 
-    exec ${pkgs.systemd}/bin/systemd-nspawn \
+    ${pkgs.systemd}/bin/systemd-nspawn \
       --setenv=IP="$IP" \
       --setenv=PREFIX="$PREFIX" \
       --rlimit=RLIMIT_NOFILE=infinity \
@@ -60,35 +62,46 @@ let
       --tmpfs=/var \
       --network-zone="$network_zone" \
       --kill-signal=SIGRTMIN+3 \
-      "${initBinary}" "${host.nixos.out.system}/init"
-  '';
+      "${initBinary}" "${host.nixos.out.system}/init" &
 
-  setupNetwork = writeScript "setup-network" ''
-    #!${stdenv.shell}
-
-    set -eu
-    set -o pipefail
-
-    iproute=${iproute}/bin/ip
-    alloc="$NOMAD_ALLOC_INDEX''${NOMAD_ALLOC_ID:0:8}"
-    network_zone="$alloc"
     link="vz-$network_zone"
     ip="${minHostAddress network prefix}/${toString prefix}"
 
-    while ! $iproute link show "$link" &>/dev/null; do
-      ${coreutils}/bin/sleep 0.1
-    done
+    if [ "$NOMAD_TASK_NAME" == "${firstHost}" ]; then
+      while ! ${iproute}/bin/ip link show "$link" &>/dev/null; do
+        ${coreutils}/bin/sleep 0.2
+      done
 
-    $iproute addr add "$ip" dev "$link"
-    $iproute link set dev "$link" up
+      ${iproute}/bin/ip addr add "$ip" dev "$link"
+      ${iproute}/bin/ip link set dev "$link" up
+    fi
 
-    exec ${coreutils}/bin/sleep infinity
+    function shutdown() {
+      local machine="$1"
+      local link="$2"
+
+      ${pkgs.systemd}/bin/machinectl stop "$machine"
+
+      if [ "$NOMAD_TASK_NAME" == "${firstHost}" ]; then
+        #${iproute}/bin/ip link set dev "$link" down || true
+        sleep 1
+        while ${iproute}/bin/ip link show "$link" &>/dev/null; do
+          ${iproute}/bin/ip link delete "$link" || true
+          ${coreutils}/bin/sleep 0.5
+        done
+      fi
+    }
+
+    trap "shutdown $machine_id $link" SIGINT
+
+    wait
   '';
 
   makeTask = hostName: host: ''
     task "${hostName}" {
       driver = "raw_exec"
-      kill_signal = "SIGTERM"
+      kill_signal = "SIGINT"
+      kill_timeout = "30s"
       config {
         command = "${launchHost host}"
       }
@@ -144,12 +157,6 @@ in {
         datacenters = ["dc1"]
         group "hosts" {
           count = 1
-          task "setup-network" {
-            driver = "raw_exec"
-            config {
-              command = "${setupNetwork}"
-            }
-          }
           ${concatStrings (mapAttrsToList makeTask hosts)}
         }
       }

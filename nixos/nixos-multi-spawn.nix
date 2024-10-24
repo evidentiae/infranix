@@ -63,7 +63,7 @@ let
       prefix="''${net#*/}"
       ip="$(${pkgs.ipcalc}/bin/ipcalc "$net" | \
         ${pkgs.gnugrep}/bin/grep HostMin | ${pkgs.gawk}/bin/awk '{print $2}')/$prefix"
-      iproute=${pkgs.iproute}/bin/ip
+      iproute=${pkgs.iproute2}/bin/ip
       link="vz-$zone"
       while ! $iproute link show "$link" &>/dev/null; do
         ${pkgs.coreutils}/bin/sleep 0.1

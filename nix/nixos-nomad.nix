@@ -16,8 +16,8 @@ let
 
   initBinary = writeScript "init" ''
     #!${stdenv.shell}
-    ${iproute}/bin/ip addr add $IP/$PREFIX dev host0 && \
-      ${iproute}/bin/ip link set dev host0 up
+    ${iproute2}/bin/ip addr add $IP/$PREFIX dev host0 && \
+      ${iproute2}/bin/ip link set dev host0 up
     exec "$@"
   '';
 
@@ -68,12 +68,12 @@ let
     ip="${minHostAddress network prefix}/${toString prefix}"
 
     if [ "$NOMAD_TASK_NAME" == "${firstHost}" ]; then
-      while ! ${iproute}/bin/ip link show "$link" &>/dev/null; do
+      while ! ${iproute2}/bin/ip link show "$link" &>/dev/null; do
         ${coreutils}/bin/sleep 0.2
       done
 
-      ${iproute}/bin/ip addr add "$ip" dev "$link"
-      ${iproute}/bin/ip link set dev "$link" up
+      ${iproute2}/bin/ip addr add "$ip" dev "$link"
+      ${iproute2}/bin/ip link set dev "$link" up
     fi
 
     function shutdown() {
@@ -83,10 +83,10 @@ let
       ${pkgs.systemd}/bin/machinectl stop "$machine"
 
       if [ "$NOMAD_TASK_NAME" == "${firstHost}" ]; then
-        #${iproute}/bin/ip link set dev "$link" down || true
+        #${iproute2}/bin/ip link set dev "$link" down || true
         sleep 1
-        while ${iproute}/bin/ip link show "$link" &>/dev/null; do
-          ${iproute}/bin/ip link delete "$link" || true
+        while ${iproute2}/bin/ip link show "$link" &>/dev/null; do
+          ${iproute2}/bin/ip link delete "$link" || true
           ${coreutils}/bin/sleep 0.5
         done
       fi

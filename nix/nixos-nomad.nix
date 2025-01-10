@@ -44,6 +44,8 @@ let
       fi
     done
 
+    export SYSTEMD_NSPAWN_UNIFIED_HIERARCHY=1
+
     ${pkgs.systemd}/bin/systemd-nspawn \
       --setenv=IP="$IP" \
       --setenv=PREFIX="$PREFIX" \

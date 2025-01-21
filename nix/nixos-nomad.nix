@@ -61,7 +61,7 @@ let
         ''--bind="${h}:${g}"''
       ) host.readWriteBindMounts)} \
       --tmpfs=/nix/var \
-      --tmpfs=/var \
+      --tmpfs=/var,size=8192 \
       --network-zone="$network_zone" \
       --kill-signal=SIGRTMIN+3 \
       "${initBinary}" "${host.nixos.out.system}/init" &

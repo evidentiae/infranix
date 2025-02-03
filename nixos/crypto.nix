@@ -18,6 +18,16 @@ let
 
   safeSvcName = replaceStrings ["@"] ["_"];
 
+  decryptManySecretsScript = { path, user, group }: writers.writeBash "decrypt-many-secrets" ''
+    mkdir -p "$(dirname "${path}")"
+    for s in $1; do
+      touch "${path}/$s"
+      chmod ${if group == "root" then "0400" else "0440"} "${path}/$s"
+      chown "${user}":"${group}" "${path}/$s"
+      "${cfg.decrypter}" "${secretFiles}/$s" > "${path}/$s"
+    done
+  '';
+
   decryptSecretToFile = { secret, path, user, group }: ''
     mkdir -p "$(dirname "${path}")"
     touch "${path}"
@@ -137,9 +147,10 @@ let
     };
   };
 
-  mkDecryptWrapper = secretNames: writeScript "decrypt-wrapper" (
+  mkDecryptWrapper = writeScript "decrypt-wrapper" (
     if cfg.dummy then ''
       #!${bash}/bin/bash
+      shift 1
       exec "$@"
     '' else ''
       #!${bash}/bin/bash
@@ -174,19 +185,17 @@ let
         mount --make-rslave --rbind "/$d" "$root/$d" || true
       done
 
-      chroot "$root" "${writeScript "wrapped" ''
-        #!${bash}/bin/bash
-        set -eu
-        ${concatMapStrings (s: let secret = cfg.secrets.${s}; in
-          decryptSecretToFile {
-            inherit secret;
-            path = "/secrets/${s}";
-            user = "root";
-            group = "root";
-          }
-        ) secretNames}
-        exec "$@"
-      ''}" "$@"
+      chroot "$root" "${
+        decryptManySecretsScript {
+          path = "/secrets";
+          user = "root";
+          group = "root";
+        }
+      }" "$1"
+
+      shift 1
+
+      chroot "$root" "$@"
     '');
 
 in {

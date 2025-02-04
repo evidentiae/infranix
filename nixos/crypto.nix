@@ -20,12 +20,21 @@ let
 
   decryptManySecretsScript = { path, user, group }: writers.writeBash "decrypt-many-secrets" ''
     mkdir -p "$(dirname "${path}")"
-    for s in $1; do
-      touch "${path}/$s"
-      chmod ${if group == "root" then "0400" else "0440"} "${path}/$s"
-      chown "${user}":"${group}" "${path}/$s"
-      "${cfg.decrypter}" "${secretFiles}/$s" > "${path}/$s"
-    done
+    decrypt="${writers.writeBash "decrypt-one-secret" ''
+      for s in "$@"; do
+        touch "${path}/$s"
+        chmod ${if group == "root" then "0400" else "0440"} "${path}/$s"
+        chown "${user}":"${group}" "${path}/$s"
+        "${cfg.decrypter}" "${secretFiles}/$s" > "${path}/$s"
+      done
+    ''}"
+    if [ -f "$1" ]; then
+      xargs -P4 <"$1" "$decrypt"
+    else
+      for s in $1; do
+        "$decrypt" "$s"
+      done
+    fi
   '';
 
   decryptSecretToFile = { secret, path, user, group }: ''

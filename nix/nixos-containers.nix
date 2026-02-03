@@ -13,7 +13,7 @@ let
   inherit (splitCIDR networking.network) network prefix;
 
   ipMap = mapAttrs (h: _:
-    ipAddressOfHost network prefix (1 + random h (hostCount prefix - 1))
+    ipAddressOfHost network prefix (1 + random "${h}${networking.shard}" (hostCount prefix - 1))
   ) hosts;
 
 in {
@@ -30,6 +30,10 @@ in {
           description = ''
             The network (in CIDR format) used for the containers.
           '';
+        };
+        shard = mkOption {
+          type = types.str;
+          default = "";
         };
       };
 
